@@ -328,7 +328,6 @@ public class UpdateCore extends VoltSystemProcedure {
             return new DependencyPair.TableDependencyPair(SysProcFragmentId.PF_updateCatalog, result);
         }
         else if (fragmentId == SysProcFragmentId.PF_updateCatalogAggregate) {
-            log.info("Executing PF_updateCatalogAggregate");
             VoltTable result = VoltTableUtil.unionTables(dependencies.get(SysProcFragmentId.PF_updateCatalog));
             return new DependencyPair.TableDependencyPair(SysProcFragmentId.PF_updateCatalogAggregate, result);
         }
@@ -378,7 +377,9 @@ public class UpdateCore extends VoltSystemProcedure {
                            String catalogDiffCommands,
                            int expectedCatalogVersion,
                            long genId,
+                           byte[] catalogBytes,
                            byte[] catalogHash,
+                           byte[] deploymentBytes,
                            byte[] deploymentHash,
                            byte worksWithElastic,
                            String[] tablesThatMustBeEmpty,
@@ -426,8 +427,7 @@ public class UpdateCore extends VoltSystemProcedure {
         // log the start of UpdateCore
         log.info("New catalog update from: " + VoltDB.instance().getCatalogContext().getCatalogLogString());
         log.info("To: catalog hash: " + Encoder.hexEncode(catalogHash).substring(0, 10) +
-                ", deployment hash: " + Encoder.hexEncode(deploymentHash).substring(0, 10) +
-                ", version: " + (expectedCatalogVersion + 1));
+                ", deployment hash: " + Encoder.hexEncode(deploymentHash).substring(0, 10));
 
         start = System.nanoTime();
 
@@ -442,7 +442,8 @@ public class UpdateCore extends VoltSystemProcedure {
         }
 
         try {
-            CatalogUtil.publishCatalog(zk, expectedCatalogVersion + 1);
+            CatalogUtil.updateCatalogToZK(zk, expectedCatalogVersion + 1, genId,
+                    catalogBytes, catalogHash, deploymentBytes);
         } catch (KeeperException | InterruptedException e) {
             log.error("error writing catalog bytes on ZK during @UpdateCore");
             throw e;

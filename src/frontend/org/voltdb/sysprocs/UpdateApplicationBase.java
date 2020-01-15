@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.calcite.sql.SqlNode;
 import org.apache.zookeeper_voltpatches.CreateMode;
-import org.apache.zookeeper_voltpatches.KeeperException;
 import org.apache.zookeeper_voltpatches.ZooKeeper;
 import org.hsqldb_voltpatches.HSQLInterface;
 import org.voltcore.logging.VoltLogger;
@@ -57,7 +56,6 @@ import org.voltdb.iv2.MpInitiator;
 import org.voltdb.iv2.UniqueIdGenerator;
 import org.voltdb.task.TaskManager;
 import org.voltdb.utils.CatalogUtil;
-import org.voltdb.utils.CatalogUtil.SegmentedCatalog;
 import org.voltdb.utils.CompressionService;
 import org.voltdb.utils.InMemoryJarfile;
 
@@ -406,8 +404,8 @@ public abstract class UpdateApplicationBase extends VoltNTSystemProcedure {
         String procedureName = "@VerifyCatalogAndWriteJar";
 
         CompletableFuture<Map<Integer,ClientResponse>> cf =
-                callNTProcedureOnAllHosts(procedureName, ccr.encodedDiffCommands,
-                        ccr.expectedCatalogVersion);
+                callNTProcedureOnAllHosts(procedureName, ccr.catalogBytes, ccr.encodedDiffCommands,
+                        ccr.catalogHash, ccr.deploymentBytes);
 
         Map<Integer, ClientResponse> resultMapByHost = null;
         String err;
@@ -525,6 +523,13 @@ public abstract class UpdateApplicationBase extends VoltNTSystemProcedure {
             return makeQuickResponse(ClientResponseImpl.GRACEFUL_FAILURE, errMsg);
         }
 
+        // write the new catalog to a temporary jar file
+        errMsg = verifyAndWriteCatalogJar(ccr);
+        if (errMsg != null) {
+            VoltZK.removeActionBlocker(zk, VoltZK.catalogUpdateInProgress, hostLog);
+            return makeQuickResponse(ClientResponseImpl.GRACEFUL_FAILURE, errMsg);
+        }
+
         // ENG-14511 on assertion failures in test environment, ensure removal of action blocker
         final long genId;
         try {
@@ -535,26 +540,10 @@ public abstract class UpdateApplicationBase extends VoltNTSystemProcedure {
             return makeQuickResponse(ClientResponseImpl.GRACEFUL_FAILURE, errMsg);
         }
 
-        hostLog.info("About to call @UpdateCore");
-        try {
-            CatalogUtil.stageCatalogToZK(zk, ccr.expectedCatalogVersion + 1, genId, -1,
-                    SegmentedCatalog.create(ccr.catalogBytes, ccr.catalogHash, ccr.deploymentBytes));
-        } catch (KeeperException | InterruptedException e) {
-            errMsg = "error writing stage catalog bytes on ZK during " + invocationName;
-            return makeQuickResponse(ClientResponse.GRACEFUL_FAILURE, errMsg);
-        }
-
-        // write the new catalog to a temporary jar file
-        errMsg = verifyAndWriteCatalogJar(ccr);
-        if (errMsg != null) {
-            VoltZK.removeActionBlocker(zk, VoltZK.catalogUpdateInProgress, hostLog);
-            return makeQuickResponse(ClientResponseImpl.GRACEFUL_FAILURE, errMsg);
-        }
-
         // update the catalog jar
         CompletableFuture<ClientResponse> first = callProcedure(
                 "@UpdateCore", ccr.encodedDiffCommands, ccr.expectedCatalogVersion,
-                genId, ccr.catalogHash, ccr.deploymentHash,
+                genId, ccr.catalogBytes, ccr.catalogHash, ccr.deploymentBytes, ccr.deploymentHash,
                 ccr.worksWithElastic ? 1 : 0, ccr.tablesThatMustBeEmpty, ccr.reasonsForEmptyTables,
                 ccr.requiresSnapshotIsolation ? 1 : 0, ccr.requireCatalogDiffCmdsApplyToEE ? 1 : 0,
                 ccr.hasSchemaChange ?  1 : 0, ccr.requiresNewExportGeneration ? 1 : 0,

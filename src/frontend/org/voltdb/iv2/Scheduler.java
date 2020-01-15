@@ -86,7 +86,6 @@ abstract public class Scheduler implements InitiatorMessageHandler
     private TxnEgo m_txnEgo;
     final protected int m_partitionId;
     protected LoadedProcedureSet m_procSet;
-    protected boolean m_isLowestSiteId;
 
     // helper class to put command log work in order
     protected final ReplaySequencer m_replaySequencer = new ReplaySequencer();
@@ -186,10 +185,6 @@ abstract public class Scheduler implements InitiatorMessageHandler
 
     public void setProcedureSet(LoadedProcedureSet procSet) {
         m_procSet = procSet;
-    }
-
-    public void setIsLowestSiteId(Boolean isLowestSiteId) {
-        m_isLowestSiteId = isLowestSiteId;
     }
 
     /**
