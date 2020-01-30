@@ -3021,16 +3021,16 @@ public abstract class CatalogUtil {
                              params[12]);           // hasSecurityUserChange
     }
 
-    public static Pair<Integer, Boolean> getMatchingOrHighestCatalogVersionNumber(ZooKeeper zk, long txnId) {
+    public static Pair<Integer, Boolean> getMatchingOrHighestCatalogVersionNumber(ZooKeeper zk, ZKCatalogStatus expectedFlag, long expectedTxnId) {
         Pair<String, Integer> catalogPair = null;
         boolean match = true;
         try {
             // First see if somebody created the version node for us
-            catalogPair = findLatestViableCatalog(zk, null, txnId);
+            catalogPair = findLatestViableCatalog(zk, expectedFlag, expectedTxnId);
             // If not find the highest catalog version node
             if (catalogPair == null) {
                 match = false;
-                catalogPair = findLatestViableCatalog(zk, null, -1);
+                catalogPair = findLatestViableCatalog(zk, expectedFlag, -1);
             }
         } catch (KeeperException | InterruptedException ignore) {}
         if (catalogPair != null) {
