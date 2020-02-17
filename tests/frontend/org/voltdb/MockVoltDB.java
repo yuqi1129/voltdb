@@ -56,6 +56,7 @@ import org.voltdb.catalog.Column;
 import org.voltdb.catalog.Database;
 import org.voltdb.catalog.Procedure;
 import org.voltdb.catalog.Table;
+import org.voltdb.common.NodeState;
 import org.voltdb.compiler.deploymentfile.DeploymentType;
 import org.voltdb.compiler.deploymentfile.PathsType;
 import org.voltdb.dtxn.SiteTracker;
@@ -630,6 +631,12 @@ public class MockVoltDB implements VoltDBInterface
     public OperationMode getStartMode()
     {
         return m_startMode;
+    }
+
+    @Override
+    public NodeState getNodeState()
+    {
+        return NodeState.UP; // a small lie
     }
 
     @Override

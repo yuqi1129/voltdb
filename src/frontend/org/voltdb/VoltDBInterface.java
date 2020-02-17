@@ -24,6 +24,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.voltcore.messaging.HostMessenger;
+import org.voltdb.common.NodeState;
 import org.voltdb.compiler.deploymentfile.DeploymentType;
 import org.voltdb.compiler.deploymentfile.PathsType;
 import org.voltdb.compiler.deploymentfile.PathsType.Largequeryswap;
@@ -242,6 +243,8 @@ public interface VoltDBInterface
     public void setStartMode(OperationMode mode);
 
     public OperationMode getStartMode();
+
+    public NodeState getNodeState();
 
     public void promoteToMaster();
 

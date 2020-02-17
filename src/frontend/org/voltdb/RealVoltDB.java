@@ -213,6 +213,7 @@ import org.voltdb.utils.SystemStatsCollector;
 import org.voltdb.utils.TopologyZKUtils;
 import org.voltdb.utils.VoltFile;
 import org.voltdb.utils.VoltSampler;
+import org.voltdb.utils.StatusListener; // @@@@@@
 
 import com.google_voltpatches.common.base.Charsets;
 import com.google_voltpatches.common.base.Joiner;
@@ -961,6 +962,12 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                         consoleLog.info(String.format("Licensed to: %s", licensee));
                     }
                 }
+
+		// @@@@@@@ TEMPORARY PLACEMENT @@@@@@@
+		consoleLog.info("@@@@ Starting status listener");
+		StatusListener sl = new StatusListener(null, null, 8989, true);
+		sl.start();
+		consoleLog.info("@@@@ Done starting status listener");
             }
 
             // Replay command line args that we can see
@@ -4435,6 +4442,12 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     public OperationMode getStartMode()
     {
         return m_startMode;
+    }
+
+    @Override
+    public NodeState getNodeState()
+    {
+       return m_statusTracker.get();
     }
 
     @Override
