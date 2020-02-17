@@ -157,6 +157,12 @@ public class Benchmark {
         @Option(desc = "Allow set ratio of upsert against exist column.")
         float upserthitratio = (float)0.20;
 
+        @Option(desc = "Allow set ratio of use of big jar files, when updating classes.")
+        float bigjarratio = (float)0.50;
+
+        @Option(desc = "Allow set ratio of use of jar files containing lots of Java classes, when big jar files are used.")
+        float bigjarjavaratio = (float)0.0;
+
         @Option(desc = "Allow disabling different threads for testing specific functionality. ")
         String disabledthreads = "none";
         //threads: "clients,partBiglt,replBiglt,partTrunclt,replTrunclt,partCappedlt,replCappedlt,partLoadlt,replLoadlt,readThread,adHocMayhemThread,idpt,updateclasses,partNDlt,replNDlt"
@@ -199,6 +205,8 @@ public class Benchmark {
             if (swapratio < 0.0 || swapratio > 1.0) exitWithMessageAndUsage("swapratio must be between 0.0 and 1.0");
             if (upsertratio < 0.0 || upsertratio > 1.0) exitWithMessageAndUsage("upsertratio must be between 0.0 and 1.0");
             if (upserthitratio < 0.0 || upserthitratio > 1.0) exitWithMessageAndUsage("upserthitratio must be between 0.0 and 1.0");
+            if (bigjarratio < 0.0 || bigjarratio > 1.0) exitWithMessageAndUsage("bigjarratio must be between 0.0 and 1.0");
+            if (bigjarjavaratio < 0.0 || bigjarjavaratio > 1.0) exitWithMessageAndUsage("bigjarjavaratio must be between 0.0 and 1.0");
         }
 
         @Override
@@ -812,7 +820,7 @@ public class Benchmark {
         }
 
         if (!config.disabledThreads.contains("updateclasses")) {
-            updcls = new UpdateClassesThread(client, config.duration);
+            updcls = new UpdateClassesThread(client, config.duration, config.bigjarratio, config.bigjarjavaratio);
             updcls.start();
         }
 

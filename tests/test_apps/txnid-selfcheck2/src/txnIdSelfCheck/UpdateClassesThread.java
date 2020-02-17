@@ -41,14 +41,30 @@ public class UpdateClassesThread extends BenchmarkThread {
     final AtomicBoolean m_needsBlock = new AtomicBoolean(false);
     final byte[] jarData;
     final long cycletime = 10000;
+    final Random r = new Random(0);
+    final float bigjarRatio;
+    final float bigjarJavaRatio;
 
-    public UpdateClassesThread(Client client, long duration_secs) {
+    public UpdateClassesThread(Client client, long duration_secs, float bigjarRatio, float bigjarJavaRatio) {
         log.info("UpdateClasses initializing...");
         setName("UpdateClasses");
         this.client = client;
+        this.bigjarRatio = bigjarRatio;
+        this.bigjarJavaRatio = bigjarJavaRatio;
         log.info("UpdateClasses cycle " + cycletime+"ms");
+        // randomly determine which jar file to use
+        String txnid_jar_file = "txnid.jar";  // default
+        if (bigjarRatio > 0.0 && r.nextInt(100) < bigjarRatio * 100.0) {
+            if (bigjarJavaRatio > 0.0 && r.nextInt(100) < bigjarJavaRatio * 100.) {
+                int bigJavaJarNumber = r.nextInt(2) + 1;
+                txnid_jar_file = "txnid-big-java"+bigJavaJarNumber+".jar";
+            } else {
+                int bigTextJarNumber = r.nextInt(4) + 1;
+                txnid_jar_file = "txnid-big-text"+bigTextJarNumber+".jar";
+            }
+        }
         // read the jar file
-        File file = new File("txnid.jar");
+        File file = new File(txnid_jar_file);
         log.info("Loaded jar " + file.getAbsolutePath()+ " File size: " + file.length());
         jarData = new byte[(int) file.length()];
         try {
