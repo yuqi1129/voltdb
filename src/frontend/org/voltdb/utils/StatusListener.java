@@ -28,18 +28,14 @@ import javax.servlet.SessionTrackingMode;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import com.google_voltpatches.common.net.HostAndPort;
 import org.apache.http.entity.ContentType;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.server.session.DefaultSessionIdManager;
-import org.eclipse.jetty.server.session.SessionHandler;
-import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHandler;
+
+import com.google_voltpatches.common.net.HostAndPort;
 import org.json_voltpatches.JSONArray;
 import org.json_voltpatches.JSONObject;
 import org.voltcore.logging.Level;
@@ -48,65 +44,47 @@ import org.voltcore.utils.CoreUtils;
 import org.voltdb.VoltDB;
 
 /**
- * This listener handles requests for server status.
- * It is similar in a broad sense to HTTPAdminListener,
- * but is separate since it needs to be started early
- * in server initialization.
+ * This listener handles requests for server status. It is similar
+ * in a broad sense to HTTPAdminListener, but is separate since
+ * it needs to be started early in server initialization. It is
+ * also somewhat simpler.
+ *
+ * The listener is based on Jetty 9.4; the API documentation is at
+ * https://www.eclipse.org/jetty/documentation/current/embedding-jetty.html
  */
 public class StatusListener {
-
     private static final VoltLogger m_log = new VoltLogger("HOST");
 
-    private static final String JSON_CONTENT_TYPE = ContentType.APPLICATION_JSON.toString();
-    private static final String HTML_CONTENT_TYPE = "text/html;charset=utf-8";
+    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 4);
+    private static final int QUEUELIM = POOLSIZE + 4;
+    private static final int CONNTMO = Integer.getInteger("STATUS_CONNECTION_TIMEOUT_SECONDS", 30) * 1000;
+    private static final int REQTMO = Integer.getInteger("STATUS_REQUEST_TIMEOUT_SECONDS", 15) * 1000;
+    private static final int MAXQUERY = 256;
+    private static final int MAXKEYS = 2;
 
     private final int m_port;
     private final String m_resolvedIntf;
     private final String m_publicIntf;
     private final boolean m_mustListen;
+
     private final Server m_server;
-    private final DefaultSessionIdManager m_idmanager;
-    private final SessionHandler m_sessionHandler;
 
     private static StatusListener singleton; // xxx fix this
     private String m_hostHeader;
 
     public StatusListener(String intf, String publicIntf, int port, boolean mustListen) {
 
-	final int poolsize = Integer.getInteger("STATUS_POOL_SIZE", 4);
-	final int queueLim = poolsize + 4;
-	final int timeout = Integer.getInteger("STATUS_REQUEST_TIMEOUT_SECONDS", 15);
-	final int idleTime = Integer.getInteger("STATUS_SESSION_TIMEOUT_SECONDS", 30);
-	final int maxQuery = 1024;
-	final int maxKeys = 16;
 
 	m_port = (port > 0 ? port : 8989);
 	m_resolvedIntf = resolveInterface(intf, "", m_port);
 	m_publicIntf = resolveInterface(publicIntf, m_resolvedIntf, m_port);
 	m_mustListen = mustListen;
 
-	QueuedThreadPool qtp = new QueuedThreadPool(poolsize, 1, timeout * 1000,
-						    new LinkedBlockingQueue<>(queueLim));
+	QueuedThreadPool qtp = new QueuedThreadPool(POOLSIZE, 1, REQTMO,
+						    new LinkedBlockingQueue<>(QUEUELIM));
 	m_server = new Server(qtp);
-	m_server.setAttribute("org.eclipse.jetty.server.Request.maxFormContentSize",
-			      Integer.valueOf(maxQuery));
-
-	m_sessionHandler= null;
-	/**
-	m_sessionHandler = new SessionHandler();
-	m_sessionHandler.setMaxInactiveInterval(idleTime);
-	m_sessionHandler.setServer(m_server);
-	**/
-
-	m_idmanager = null;
-	/**
-	m_idmanager = new DefaultSessionIdManager(m_server);
-	m_idmanager.setWorkerName("status-worker");
-	m_server.setSessionIdManager(m_idmanager);
-	m_sessionHandler.setSessionIdManager(m_idmanager);
-	**/
-
 	ServerConnector connector = null;
+
 	try {
 	    connector = new ServerConnector(m_server);
 	    if (!m_resolvedIntf.isEmpty()) {
@@ -114,29 +92,18 @@ public class StatusListener {
 	    }
 	    connector.setPort(m_port);
 	    connector.setName("status-connector");
-	    connector.open();
+	    connector.setIdleTimeout(CONNTMO);
 	    m_server.addConnector(connector);
 
-	    ServletHandler handy = new ServletHandler();
-	    m_server.setHandler(handy);
-	    handy.addServletWithMapping(StatusServlet.class, "/status");
-	    /***
-	    ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
-	    context.setContextPath("/");
-	    context.setMaxFormContentSize(maxQuery);
-	    context.setMaxFormKeys(maxKeys);
-	    context.getSessionHandler().getSessionCookieConfig().setHttpOnly(true);
-	    context.addServlet(StatusServlet.class, "/status");
-	    context.addServlet(DefaultServlet.class, "/");
-	    // xxx async supported?
+	    ServletContextHandler ctxHandler = new ServletContextHandler();
+	    ctxHandler.setContextPath("/");
+	    ctxHandler.setMaxFormContentSize(MAXQUERY);
+	    ctxHandler.setMaxFormKeys(MAXKEYS);
+	    ctxHandler.addServlet(StatusServlet.class, "/status").setAsyncSupported(true);
+	    m_server.setHandler(ctxHandler);
 
-	    Set<SessionTrackingMode> trackModes = new HashSet<>();  // setOf ? xxx
-	    trackModes.add(SessionTrackingMode.COOKIE);
-	    context.getSessionHandler().setSessionTrackingModes(trackModes);
-	    **/
-
+	    connector.open();
 	    singleton = this; // xxxx
-
 	} catch (Exception ex) {
 	    logWarning("Unexpected exception in init: %s", ex);
 	    try { connector.close(); } catch (Exception e2) { }
