@@ -209,11 +209,11 @@ import org.voltdb.utils.LogKeys;
 import org.voltdb.utils.MiscUtils;
 import org.voltdb.utils.PlatformProperties;
 import org.voltdb.utils.ProClass;
+import org.voltdb.utils.StatusListener;
 import org.voltdb.utils.SystemStatsCollector;
 import org.voltdb.utils.TopologyZKUtils;
 import org.voltdb.utils.VoltFile;
 import org.voltdb.utils.VoltSampler;
-import org.voltdb.utils.StatusListener; // @@@@@@
 
 import com.google_voltpatches.common.base.Charsets;
 import com.google_voltpatches.common.base.Joiner;
@@ -907,6 +907,9 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 System.exit(-1);
             }
 
+            // Node state is INITIALIZING
+            m_statusTracker = new NodeStateTracker();
+
             // print the ascii art!.
             // determine the edition
             // Check license availability
@@ -963,11 +966,13 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                     }
                 }
 
-		// @@@@@@@ TEMPORARY PLACEMENT @@@@@@@
-		consoleLog.info("@@@@ Starting status listener");
-		StatusListener sl = new StatusListener(null, null, 8989, true);
-		sl.start();
-		consoleLog.info("@@@@ Done starting status listener");
+                // Start the listener that responds to "status" requests. This needs
+                // to be started "early" to be available during initialization.
+                StatusListener sl = new StatusListener(config.m_statusInterface,
+                                                       config.m_statusPort,
+                                                       config.m_publicInterface);
+                sl.start();
+                consoleLog.info("Status listener started on " + sl.displayInterface());
             }
 
             // Replay command line args that we can see
@@ -1033,8 +1038,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                         "\" command is deprecated, please use \"init\" and \"start\" for your cluster operations.");
             }
 
-            // config UUID is part of the status tracker.
-            m_statusTracker = new NodeStateTracker();
             final File stagedCatalogLocation = new VoltFile(
                     RealVoltDB.getStagedCatalogPath(config.m_voltdbRoot.getAbsolutePath()));
 
@@ -4447,7 +4450,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     @Override
     public NodeState getNodeState()
     {
-       return m_statusTracker.get();
+        return m_statusTracker.get();
     }
 
     @Override

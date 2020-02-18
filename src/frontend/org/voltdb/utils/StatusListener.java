@@ -19,23 +19,13 @@ package org.voltdb.utils;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import javax.servlet.ServletException;
-import javax.servlet.SessionTrackingMode;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-import org.apache.http.entity.ContentType;
-import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 
-import com.google_voltpatches.common.net.HostAndPort;
 import org.json_voltpatches.JSONArray;
 import org.json_voltpatches.JSONObject;
 import org.voltcore.logging.Level;
@@ -53,6 +43,7 @@ import org.voltdb.VoltDB;
  * https://www.eclipse.org/jetty/documentation/current/embedding-jetty.html
  */
 public class StatusListener {
+
     private static final VoltLogger m_log = new VoltLogger("HOST");
 
     private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 4);
@@ -65,136 +56,145 @@ public class StatusListener {
     private final int m_port;
     private final String m_resolvedIntf;
     private final String m_publicIntf;
-    private final boolean m_mustListen;
-
     private final Server m_server;
 
-    private static StatusListener singleton; // xxx fix this
     private String m_hostHeader;
+    private static StatusListener singleton;
 
-    public StatusListener(String intf, String publicIntf, int port, boolean mustListen) {
+    /**
+     * Status listener:
+     * @param intf  address of interface on which to listen for connections
+     * @param port  TCP port number
+     * @param publicIntf  address to be returned in 'Host' header (if different)
+     */
+    public StatusListener(String intf, int port, String publicIntf) {
 
+        assert port > 0 && port <= 65535;
+        m_port = port;
+        m_resolvedIntf = resolveInterface(intf, "");
+        m_publicIntf = resolveInterface(publicIntf, m_resolvedIntf);
 
-	m_port = (port > 0 ? port : 8989);
-	m_resolvedIntf = resolveInterface(intf, "", m_port);
-	m_publicIntf = resolveInterface(publicIntf, m_resolvedIntf, m_port);
-	m_mustListen = mustListen;
+        QueuedThreadPool qtp = new QueuedThreadPool(POOLSIZE, 1, REQTMO,
+                                                    new LinkedBlockingQueue<>(QUEUELIM));
+        m_server = new Server(qtp);
+        ServerConnector connector = null;
 
-	QueuedThreadPool qtp = new QueuedThreadPool(POOLSIZE, 1, REQTMO,
-						    new LinkedBlockingQueue<>(QUEUELIM));
-	m_server = new Server(qtp);
-	ServerConnector connector = null;
+        try {
+            connector = new ServerConnector(m_server);
+            connector.setHost(m_resolvedIntf);
+            connector.setPort(m_port);
+            connector.setName("status-connector");
+            connector.setIdleTimeout(CONNTMO);
+            m_server.addConnector(connector);
 
-	try {
-	    connector = new ServerConnector(m_server);
-	    if (!m_resolvedIntf.isEmpty()) {
-		connector.setHost(m_resolvedIntf);
-	    }
-	    connector.setPort(m_port);
-	    connector.setName("status-connector");
-	    connector.setIdleTimeout(CONNTMO);
-	    m_server.addConnector(connector);
+            ServletContextHandler ctxHandler = new ServletContextHandler();
+            ctxHandler.setContextPath("/");
+            ctxHandler.setMaxFormContentSize(MAXQUERY);
+            ctxHandler.setMaxFormKeys(MAXKEYS);
+            ctxHandler.addServlet(StatusServlet.class, "/status").setAsyncSupported(true);
+            m_server.setHandler(ctxHandler);
 
-	    ServletContextHandler ctxHandler = new ServletContextHandler();
-	    ctxHandler.setContextPath("/");
-	    ctxHandler.setMaxFormContentSize(MAXQUERY);
-	    ctxHandler.setMaxFormKeys(MAXKEYS);
-	    ctxHandler.addServlet(StatusServlet.class, "/status").setAsyncSupported(true);
-	    m_server.setHandler(ctxHandler);
+            connector.open();
+        }
 
-	    connector.open();
-	    singleton = this; // xxxx
-	} catch (Exception ex) {
-	    logWarning("Unexpected exception in init: %s", ex);
-	    try { connector.close(); } catch (Exception e2) { }
-	    try { m_server.destroy(); } catch (Exception e2) { }
-	    throw new RuntimeException("Failed to initialize status listener", ex);
-	}
+        catch (Exception ex) {
+            logWarning("StatusListener: unexpected exception in init: %s", ex);
+            try { connector.close(); } catch (Exception e2) { }
+            try { m_server.destroy(); } catch (Exception e2) { }
+            throw new RuntimeException("Failed to initialize status listener", ex);
+        }
+
+        singleton = this;
+    }
+
+    public String displayInterface() {
+        return (m_resolvedIntf.isEmpty() ? "ANY" : m_resolvedIntf) + ':' + m_port;
     }
 
     public static StatusListener instance() {
-	return singleton;
+        return singleton;
     }
 
     public void start() {
-	try {
-	    m_server.start();
-	    logInfo("Listening for status requests on %s", m_publicIntf);
-	} catch (Exception ex) {
-	    logWarning("Unexpected exception in start: %s", ex);
-	    try { m_server.stop(); } catch (Exception e2) { }
-	    try { m_server.destroy(); } catch (Exception e2) { }
-	    if (m_mustListen) {
-		throw new RuntimeException("Failed to start status listener", ex);
-	    }
-	}
+        try {
+            m_server.start();
+            logInfo("Listening for status requests on %s", displayInterface());
+        } catch (Exception ex) {
+            logWarning("StatusListener: unexpected exception from start: %s", ex);
+            stopSafe();
+            throw new RuntimeException("Failed to start status listener", ex);
+        }
     }
 
     public void stop() {
-	logInfo("Shutting down status listener on %s", m_publicIntf);
-	try {
-	    m_server.stop();
-	    m_server.join();
-	} catch (Exception ex) {
-	    logWarning("Unexpected exception in stop: %s", ex);
-	}
-	try {
-	    m_server.destroy();
-	} catch (Exception ex) {
-	    logWarning("Unexpected exception in stop: %s", ex);
-	}
+        logInfo("Shutting down status listener on %s", displayInterface());
+        stopSafe();
+    }
+
+    private void stopSafe() {
+        try {
+            m_server.stop();
+            m_server.join();
+        } catch (Exception ex) {
+            logWarning("StatusListener: unexpected exception from stop/join: %s", ex);
+        }
+        try {
+            m_server.destroy();
+        } catch (Exception ex) {
+            logWarning("StatusListener: unexpected exception from destroy: %s", ex);
+        }
     }
 
     protected String getHostHeader() {
-	if (m_hostHeader != null) {
-	    return m_hostHeader;
-	}
-	if (!m_publicIntf.isEmpty()) {
-	    m_hostHeader = m_publicIntf;
-	    return m_hostHeader;
-	}
-	InetAddress addr = null;
-	try {
-	    JSONObject jsObj = new JSONObject(VoltDB.instance().getLocalMetadata());
-	    JSONArray interfaces = jsObj.getJSONArray("interfaces");
-	    addr = InetAddress.getByName(interfaces.getString(0)); // external interface
-	} catch (Exception ex) {
-	    logWarning("Failed to get HTTP interface information: %s", ex);
-	}
-	if (addr == null) {
-	    addr = CoreUtils.getLocalAddress();
-	}
-	m_hostHeader = addr.getHostAddress() + ":" + m_port;
-	return m_hostHeader;
+        if (m_hostHeader == null) {
+            String intf;
+            if (!m_publicIntf.isEmpty()) {
+                intf = m_publicIntf;
+            } else {
+                intf = getLocalAddress().getHostAddress();
+                logInfo("Using %s for host header", intf);
+            }
+            m_hostHeader = intf + ':' + m_port;
+        }
+        return m_hostHeader;
     }
 
-    private static String resolveInterface(String intf, String defIntf, int defPort) {
-	String temp = (intf == null ? "" : intf.trim());
-	return temp.isEmpty() ? defIntf
-	    : HostAndPort.fromHost(temp).withDefaultPort(defPort).toString();
+    private static InetAddress getLocalAddress() {
+        InetAddress addr = null;
+        try {
+            String meta = VoltDB.instance().getLocalMetadata();
+            if (meta != null && !meta.isEmpty()) {
+                JSONObject jsObj = new JSONObject(meta);
+                JSONArray ifList = jsObj.getJSONArray("interfaces");
+                addr = InetAddress.getByName(ifList.getString(0)); // external interface
+            }
+        }
+        catch (Exception ex) {
+            logWarning("Failed to get HTTP interface information: %s", ex);
+        }
+        if (addr == null) {
+            addr = CoreUtils.getLocalAddress();
+        }
+        return addr;
+    }
+
+    private static String resolveInterface(String intf, String defIntf) {
+        String temp = (intf == null ? "" : intf.trim());
+        return temp.isEmpty() ? defIntf : temp;
     }
 
     private static void doLog(Level level, String str, Object[] args) {
-	if (args.length != 0) {
-	    str = String.format(str, args);
-	}
-	m_log.log(level, str, null);
-    }
-
-    private static void logError(String str, Object... args) {
-	doLog(Level.ERROR, str, args);
+        if (args.length != 0) {
+            str = String.format(str, args);
+        }
+        m_log.log(level, str, null);
     }
 
     private static void logWarning(String str, Object... args) {
-	doLog(Level.WARN, str, args);
+        doLog(Level.WARN, str, args);
     }
 
     private static void logInfo(String str, Object... args) {
-	doLog(Level.INFO, str, args);
-    }
-
-    private static void logDebug(String str, Object... args) {
-	// TODO: check if debug enabled
-	doLog(Level.INFO, str, args); // xxx debug
+        doLog(Level.INFO, str, args);
     }
 }
