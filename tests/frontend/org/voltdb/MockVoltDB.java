@@ -640,6 +640,12 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
+    public int getVoltPid()
+    {
+        return 9999; // no-one cares
+    }
+
+    @Override
     public void promoteToMaster()
     {
         m_replicationRole = ReplicationRole.NONE;

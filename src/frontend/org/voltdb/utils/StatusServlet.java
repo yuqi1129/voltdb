@@ -37,18 +37,19 @@ public class StatusServlet extends HttpServlet {
 
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response)
-	    throws IOException, ServletException {
-	response.setHeader("Host", StatusListener.instance().getHostHeader());
-	response.setContentType(CONTENT_TYPE);
-	response.setCharacterEncoding(ENCODING);
-	response.setStatus(HttpServletResponse.SC_OK);
-	response.getWriter().print(theStatus());
+            throws IOException, ServletException {
+        response.setHeader("Host", StatusListener.instance().getHostHeader());
+        response.setContentType(CONTENT_TYPE);
+        response.setCharacterEncoding(ENCODING);
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.getWriter().print(theStatus());
     }
 
     private String theStatus() {
-	VoltDBInterface instance = VoltDB.instance();
-	return String.format("nodeState: %s\r\noperMode: %s\r\n",
-			     instance.getNodeState(),
-			     instance.getMode());
+        VoltDBInterface instance = VoltDB.instance();
+        return String.format("pid: %d\r\nnodeState: %s\r\noperMode: %s\r\n",
+                             instance.getVoltPid(),
+                             instance.getNodeState(),
+                             instance.getMode());
     }
 }

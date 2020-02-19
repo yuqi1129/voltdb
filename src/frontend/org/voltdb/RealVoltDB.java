@@ -314,6 +314,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     private FailedLoginCounter m_flc = new FailedLoginCounter();
 
     private NodeStateTracker m_statusTracker;
+    private int m_voltPid;
+
     // Should the execution sites be started in recovery mode
     // (used for joining a node to an existing cluster)
     // If CL is enabled this will be set to true
@@ -887,7 +889,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
      */
     @Override
     public void initialize(Configuration config) {
-        hostLog.info("PID of this Volt process is " + CLibrary.getpid());
+        int myPid = CLibrary.getpid();
+        hostLog.info("PID of this Volt process is " + myPid);
         ShutdownHooks.enableServerStopLogging();
         synchronized(m_startAndStopLock) {
             exitAfterMessage = false;
@@ -909,6 +912,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
 
             // Node state is INITIALIZING
             m_statusTracker = new NodeStateTracker();
+            m_voltPid = myPid;
 
             // print the ascii art!.
             // determine the edition
@@ -4451,6 +4455,12 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     public NodeState getNodeState()
     {
         return m_statusTracker.get();
+    }
+
+    @Override
+    public int getVoltPid()
+    {
+        return m_voltPid;
     }
 
     @Override
