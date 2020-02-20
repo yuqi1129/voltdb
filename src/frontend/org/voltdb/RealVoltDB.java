@@ -313,6 +313,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
 
     private FailedLoginCounter m_flc = new FailedLoginCounter();
 
+    // State tracking
     private NodeStateTracker m_statusTracker;
     private int m_voltPid;
 
@@ -901,6 +902,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             ModuleManager.resetCacheRoot();
             CipherExecutor.SERVER.shutdown();
             CipherExecutor.CLIENT.shutdown();
+            StatusListener.shutdown();
 
             m_isRunningWithOldVerb = config.m_startAction.isLegacy();
 
@@ -5240,6 +5242,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 m_messenger.send(CoreUtils.getHSIdFromHostAndSite(hostId, HostMessenger.CLIENT_INTERFACE_SITE_ID), msg);
             }
         }
+        StatusListener.shutdown();
     }
 
     @Override

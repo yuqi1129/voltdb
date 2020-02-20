@@ -56,10 +56,11 @@ public class StatusListener {
     private final int m_port;
     private final String m_resolvedIntf;
     private final String m_publicIntf;
-    private final Server m_server;
 
+    private Server m_server;
     private String m_hostHeader;
     private static StatusListener singleton;
+    private static final Object lock = new Object();
 
     /**
      * Status listener:
@@ -76,23 +77,23 @@ public class StatusListener {
 
         QueuedThreadPool qtp = new QueuedThreadPool(POOLSIZE, 1, REQTMO,
                                                     new LinkedBlockingQueue<>(QUEUELIM));
-        m_server = new Server(qtp);
+        Server server = new Server(qtp);
         ServerConnector connector = null;
 
         try {
-            connector = new ServerConnector(m_server);
+            connector = new ServerConnector(server);
             connector.setHost(m_resolvedIntf);
             connector.setPort(m_port);
             connector.setName("status-connector");
             connector.setIdleTimeout(CONNTMO);
-            m_server.addConnector(connector);
+            server.addConnector(connector);
 
             ServletContextHandler ctxHandler = new ServletContextHandler();
             ctxHandler.setContextPath("/");
             ctxHandler.setMaxFormContentSize(MAXQUERY);
             ctxHandler.setMaxFormKeys(MAXKEYS);
             ctxHandler.addServlet(StatusServlet.class, "/status").setAsyncSupported(true);
-            m_server.setHandler(ctxHandler);
+            server.setHandler(ctxHandler);
 
             connector.open();
         }
@@ -101,9 +102,11 @@ public class StatusListener {
             logWarning("StatusListener: unexpected exception in init: %s", ex);
             try { connector.close(); } catch (Exception e2) { }
             try { m_server.destroy(); } catch (Exception e2) { }
+            m_server = null;
             throw new RuntimeException("Failed to initialize status listener", ex);
         }
 
+        m_server = server;
         singleton = this;
     }
 
@@ -116,32 +119,44 @@ public class StatusListener {
     }
 
     public void start() {
-        try {
-            m_server.start();
-            logInfo("Listening for status requests on %s", displayInterface());
-        } catch (Exception ex) {
-            logWarning("StatusListener: unexpected exception from start: %s", ex);
-            stopSafe();
-            throw new RuntimeException("Failed to start status listener", ex);
+        synchronized (lock) {
+            if (m_server != null) { // ignore race with stop
+                try {
+                    m_server.start();
+                    logInfo("Listening for status requests on %s", displayInterface());
+                } catch (Exception ex) {
+                    logWarning("StatusListener: unexpected exception from start: %s", ex);
+                    safeStop();
+                    throw new RuntimeException("Failed to start status listener", ex);
+                }
+            }
         }
     }
 
-    public void stop() {
-        logInfo("Shutting down status listener on %s", displayInterface());
-        stopSafe();
+    public static void shutdown() {
+        synchronized (lock) {
+            if (singleton != null) {
+                logInfo("Shutting down status listener");
+                singleton.safeStop();
+                singleton = null;
+            }
+        }
     }
 
-    private void stopSafe() {
-        try {
-            m_server.stop();
-            m_server.join();
-        } catch (Exception ex) {
-            logWarning("StatusListener: unexpected exception from stop/join: %s", ex);
-        }
-        try {
-            m_server.destroy();
-        } catch (Exception ex) {
-            logWarning("StatusListener: unexpected exception from destroy: %s", ex);
+    private void safeStop() { // caller is holding lock
+        if (m_server != null) {
+            try {
+                m_server.stop();
+                m_server.join();
+            } catch (Exception ex) {
+                logWarning("StatusListener: unexpected exception from stop/join: %s", ex);
+            }
+            try {
+                m_server.destroy();
+            } catch (Exception ex) {
+                logWarning("StatusListener: unexpected exception from destroy: %s", ex);
+            }
+            m_server = null;
         }
     }
 
