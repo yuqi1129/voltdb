@@ -1115,19 +1115,17 @@ template<typename ChunkList, typename Iter>
 struct ChunkBoundary<ChunkList, Iter, iterator_view_type::snapshot, integral_constant<bool, true>> {
     inline void const* operator()(ChunkList const& l, Iter const& iter, bool hasTxnInvisibleChunks) const noexcept {
         auto const& boundaries = reinterpret_cast<CompactingChunks const&>(l).frozenBoundaries();
-        if (boundaries.left().empty()) {     // not frozen
+        if (boundaries.left().empty()) {        // not frozen
             return iter->next();
         } else {
             auto const leftId = boundaries.left().chunkId(),
                  rightId = boundaries.right().chunkId(),
                  iterId = iter->id();
-            if(less_rolling(leftId, iterId)) {
-                // in chunk visible to frozen iterator only
+            if(less_rolling(leftId, iterId)) {  // in chunk visible to frozen iterator only
                 return iter->end();
-            } else if (leftId == iterId) {
-                // in the left boundary of frozen state
+            } else if (leftId == iterId) {      // in the left boundary of frozen state
                 return hasTxnInvisibleChunks ? iter->end() : boundaries.left().address();
-            } else if (rightId == iterId) {
+            } else if (rightId == iterId) {     // in the right boundary
                 return boundaries.right().address();
             } else {
                 return iter->next();
@@ -1230,7 +1228,7 @@ inline bool IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>:
 template<typename Chunks, typename Tag, typename E> inline
 IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::elastic_iterator(
         typename IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::container_type c) :
-    super(c), m_chunkId(super::list_iterator()->id()) {}
+    super(c), m_txnBoundary(*c.last()), m_chunkId(super::list_iterator()->id()) {}
 
 template<typename Chunks, typename Tag, typename E> inline
 typename IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator
@@ -1385,6 +1383,9 @@ inline void const* position_type::address() const noexcept {
 inline bool position_type::empty() const noexcept {
     return m_addr == nullptr;
 }
+inline bool position_type::operator==(position_type const& o) const noexcept {
+    return m_addr == o.address();                                      // optimized comparison
+}
 
 inline position_type& position_type::operator=(position_type const& o) noexcept {
     const_cast<size_t&>(m_chunkId) = o.chunkId();
@@ -1422,7 +1423,9 @@ IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::drained() noexcept {
     if (super::drained()) {
         return true;
     } else if (super::storage().empty() ||
-            less<position_type>()(*super::storage().last(), *this)) {
+            less<position_type>()(*super::storage().last(), *this) ||
+            less<position_type>()(m_txnBoundary, *this) ||
+            m_txnBoundary == *this) {
         super::m_cursor = nullptr;
         return true;
     } else {

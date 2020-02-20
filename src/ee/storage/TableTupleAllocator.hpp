@@ -383,6 +383,7 @@ namespace voltdb {
             size_t chunkId() const noexcept;
             void const* address() const noexcept;
             bool empty() const noexcept;               // makes it behave like std::optional<position_type>
+            bool operator==(position_type const&) const noexcept;
         };
 
         /**
@@ -758,11 +759,12 @@ namespace voltdb {
                 using container_type = typename super::container_type;
                 template<typename, typename, typename> friend class ElasticIterator_refresh;
                 using value_type = typename super::value_type;
+                position_type const m_txnBoundary;
                 size_t m_chunkId;
                 void refresh();
+                elastic_iterator(container_type);
             public:
                 using constness = typename super::constness;
-                elastic_iterator(container_type);
                 static elastic_iterator begin(container_type);
                 bool drained() noexcept;
                 elastic_iterator& operator++();

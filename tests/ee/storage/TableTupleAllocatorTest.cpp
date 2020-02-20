@@ -1553,7 +1553,7 @@ TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic1) {
     while (! iter.drained()) {
         ASSERT_TRUE(Gen::same(*iter++, i++));
     }
-    ASSERT_EQ(NumTuples, i);
+    ASSERT_EQ(NumTuples / 2, i);                       // won't see any newly inserted values
 }
 
 // Test that it should work with normal, compacting removals that only eats what had
