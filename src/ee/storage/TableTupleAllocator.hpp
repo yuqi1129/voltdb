@@ -770,6 +770,7 @@ namespace voltdb {
                 elastic_iterator& operator++();
                 elastic_iterator operator++(int);
                 value_type operator*();
+                position_type const& txnBoundary() const noexcept;
             };
 
             /**
@@ -883,14 +884,15 @@ namespace voltdb {
          */
         template<typename iterator_type, typename Fun, typename Chunks,
             typename = typename enable_if<is_chunks<Chunks>::value && iterator_type::constness::value == is_const<Chunks>::value>::type>
-        inline void until(Chunks& c, Fun&& f) {
+        inline bool until(Chunks& c, Fun&& f) {
             for (auto iter = iterator_type::begin(c); ! iter.drained();) {
                 auto* addr = *iter;
                 ++iter;
                 if (f(addr)) {
-                    break;
+                    return true;
                 }
             }
+            return false;
         }
 
         // versions for multi-ary iterator constructors
@@ -913,16 +915,17 @@ namespace voltdb {
         }
 
         template<typename iterator_type, typename Fun, typename Chunks, typename... Args>
-        inline void until(Chunks& c, Fun&& f, Args&&... args) {
+        inline bool until(Chunks& c, Fun&& f, Args&&... args) {
             static_assert(iterator_type::constness::value == is_const<Chunks>::value,
                     "until(): constness of Chunks and iterator should be the same");
             for (auto iter = iterator_type::begin(c, forward<Args&&>(args)...); ! iter.drained();) {
                 auto* addr = *iter;
                 ++iter;
                 if (f(addr)) {
-                    break;
+                    return true;
                 }
             }
+            return false;
         }
     }
 

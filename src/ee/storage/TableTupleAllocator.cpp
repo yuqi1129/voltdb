@@ -196,11 +196,8 @@ inline typename ChunkList<Chunk, E>::iterator const* ChunkList<Chunk, E>::find(v
 
 template<typename Chunk, typename E>
 inline typename ChunkList<Chunk, E>::iterator const* ChunkList<Chunk, E>::find(size_t id) const {
-    if (m_byId.count(id)) {
-        return &m_byId.find(id)->second;
-    } else {
-        return nullptr;
-    }
+    auto const iter = m_byId.find(id);
+    return iter == m_byId.cend() ? nullptr : &iter->second;
 }
 
 template<typename Chunk, typename E> inline ChunkList<Chunk, E>::ChunkList(size_t tsize) noexcept :
@@ -1263,7 +1260,8 @@ struct ElasticIterator_refresh<I, ElasticIterator, integral_constant<bool, true>
                 // Current chunk has been partially compacted,
                 // to the extent that cursor position is stale
                 iter.m_cursor =
-                    ++iter.list_iterator() == iter.storage().end() ?        // drained
+                    ++iter.list_iterator() == iter.storage().end() ||
+                    less<position_type>()(iter.txnBoundary(), iter) ?        // drained
                     nullptr : iter.list_iterator()->begin();
             }
         }
@@ -1276,6 +1274,11 @@ IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::refresh() {
         IterableTableTupleChunks<Chunks, Tag, E>, typename IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator>
         const refresher{};
     refresher(*this);
+}
+
+template<typename Chunks, typename Tag, typename E> inline position_type const&
+IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::txnBoundary() const noexcept {
+    return m_txnBoundary;
 }
 
 template<typename Chunks, typename Tag, typename E> inline
