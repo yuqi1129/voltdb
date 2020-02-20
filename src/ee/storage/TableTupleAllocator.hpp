@@ -407,7 +407,7 @@ namespace voltdb {
                 bool empty() const noexcept;
             };
         private:
-            template<typename Chunks, typename Tag, typename E> friend struct IterableTableTupleChunks;
+            template<typename, typename, typename> friend struct IterableTableTupleChunks;
             using list_type = ChunkList<CompactingChunk>;
             static size_t s_id;
             static size_t gen_id();
@@ -676,6 +676,7 @@ namespace voltdb {
             typename = typename enable_if<is_class<Tag>::value && is_chunks<Chunks>::value>::type>
         struct IterableTableTupleChunks final {
             using iterator_value_type = void*;         // constness-independent type being iterated over
+            using chunk_type = Chunks;
             static Tag s_tagger;
             IterableTableTupleChunks() = delete;       // only iterator types can be created/used
             template<iterator_permission_type perm, iterator_view_type vtype>
@@ -737,15 +738,17 @@ namespace voltdb {
 
             /**
              * Special iterator that survives multiple txns.
+             * The enclosing Chunks type must be compacting.
              */
-            class elastic_iterator :
-                iterator_type<iterator_permission_type::ro, iterator_view_type::txn> {
+            class elastic_iterator : iterator_type<iterator_permission_type::ro, iterator_view_type::txn> {
                 using super = iterator_type<iterator_permission_type::ro, iterator_view_type::txn>;
                 using container_type = typename super::container_type;
+                template<typename, typename, typename> friend class ElasticIterator_refresh;
                 using value_type = typename super::value_type;
                 size_t m_chunkId;
                 void refresh();
             public:
+                using constness = typename super::constness;
                 elastic_iterator(container_type);
                 static elastic_iterator begin(container_type);
                 bool drained() noexcept;

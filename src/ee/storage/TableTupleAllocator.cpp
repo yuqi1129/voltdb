@@ -1151,7 +1151,7 @@ template<typename Chunks, typename Tag, typename E>
 template<iterator_permission_type perm, iterator_view_type view>
 inline typename IterableTableTupleChunks<Chunks, Tag, E>::template iterator_type<perm, view>
 IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::operator++(int) {
-    decltype(*this) copy(*this);
+    typename remove_reference<decltype(*this)>::type const copy(*this);
     advance();
     return copy;
 }
@@ -1181,21 +1181,45 @@ IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::begin(
     return {c};
 }
 
-template<typename Chunks, typename Tag, typename E> inline void
-IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::refresh() {
-    if (! drained()) {
-        auto const& indexBeg = super::storage().beginTxn().iterator();
-        if (less_rolling(m_chunkId, indexBeg.id())) {         // current chunk list iterator is stale
-            m_chunkId = (super::list_iterator() = indexBeg)->id();
-            super::m_cursor = super::list_iterator()->begin();
-        } else if (! super::list_iterator().contains(super::m_cursor)) {
-            // Current chunk has been partially compacted,
-            // to the extent that cursor position is stale
-            super::m_cursor =
-                ++super::list_iterator() == super::storage().end() ?        // drained
-                nullptr : super::list_iterator()->begin();
+// Helper for elastic_iterator::refresh() on compacting chunks.
+// 1. Since C++17, we will be able to inline these less-graceful
+// workarounds with if-constexpr.
+// 2. A even better solution is to use type refinement of
+// IterableTableTupleChunks, but that would be even more heavy
+// weight.
+template<typename IterableTableTupleChunks, typename ElasticIterator,
+    typename Compact = typename IterableTableTupleChunks::chunk_type::Compact>
+struct ElasticIterator_refresh {
+    inline void operator()(ElasticIterator const&) const {
+        throw logic_error("elastic_iterator can only iterate over compacting chunks");
+    }
+};
+
+template<typename I, typename ElasticIterator>
+struct ElasticIterator_refresh<I, ElasticIterator, integral_constant<bool, true>> {
+    inline void operator()(ElasticIterator& iter) const {
+        if (! iter.drained()) {
+            auto const& indexBeg = iter.storage().beginTxn().iterator();
+            if (less_rolling(iter.m_chunkId, indexBeg->id())) {         // current chunk list iterator is stale
+                iter.m_chunkId = (iter.list_iterator() = indexBeg)->id();
+                iter.m_cursor = iter.list_iterator()->begin();
+            } else if (! iter.list_iterator()->contains(iter.m_cursor)) {
+                // Current chunk has been partially compacted,
+                // to the extent that cursor position is stale
+                iter.m_cursor =
+                    ++iter.list_iterator() == iter.storage().end() ?        // drained
+                    nullptr : iter.list_iterator()->begin();
+            }
         }
     }
+};
+
+template<typename Chunks, typename Tag, typename E> inline void
+IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::refresh() {
+    static constexpr ElasticIterator_refresh<
+        IterableTableTupleChunks<Chunks, Tag, E>, typename IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator>
+        const refresher{};
+    refresher(*this);
 }
 
 template<typename Chunks, typename Tag, typename E> inline
@@ -1213,12 +1237,13 @@ IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::operator++() {
     if (! drained()) {
         m_chunkId = super::list_iterator()->id();
     }
+    return *this;
 }
 
 template<typename Chunks, typename Tag, typename E> inline
 typename IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator
 IterableTableTupleChunks<Chunks, Tag, E>::elastic_iterator::operator++(int) {
-    decltype(*this) const copy(*this);
+    typename remove_reference<decltype(*this)>::type const copy(*this);
     refresh();
     super::advance();
     if (! drained()) {
@@ -1678,7 +1703,7 @@ HookedChunksCodegen1(NonCompactingChunks<EagerNonCompactingChunk>);
 HookedChunksCodegen1(NonCompactingChunks<LazyNonCompactingChunk>);
 #undef HookedChunksCodegen1
 #undef HookedChunksCodegen2
-// iterators: 2 x (4 + 2 x 2 x 3) x 9 = ? instantiations
+// iterators
 #define IteratorTagCodegen2(perm, chunks, tag)                                   \
 template class voltdb::storage::IterableTableTupleChunks<chunks, tag>            \
     ::template iterator_type<perm, iterator_view_type::txn>;                     \
@@ -1700,7 +1725,9 @@ template class voltdb::storage::IterableTableTupleChunks<chunks, tag>           
     IteratorTagCodegen2(iterator_permission_type::rw, chunks, tag);              \
     IteratorTagCodegen2(iterator_permission_type::ro, chunks, tag);              \
     IteratorTagCodegen10(iterator_permission_type::rw, chunks, tag);             \
-    IteratorTagCodegen10(iterator_permission_type::ro, chunks, tag)
+    IteratorTagCodegen10(iterator_permission_type::ro, chunks, tag);             \
+    template class voltdb::storage::IterableTableTupleChunks<chunks, tag>::elastic_iterator
+
 #define IteratorTagCodegen(tag)                                                  \
     IteratorTagCodegen1(NonCompactingChunks<EagerNonCompactingChunk>, tag);      \
     IteratorTagCodegen1(NonCompactingChunks<LazyNonCompactingChunk>, tag);       \
