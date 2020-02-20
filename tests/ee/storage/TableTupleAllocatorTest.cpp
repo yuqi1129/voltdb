@@ -95,7 +95,7 @@ public:
 //        return ! memcmp(dst, query(state, buf), len);
         bool const eq = ! memcmp(dst, query(state, buf), len);
         if (! eq) {
-            printf("Expecte %s, got %s", hex(state).c_str(), hex(dst).c_str());
+            printf("Expect %s, got %s", hex(state).c_str(), hex(dst).c_str());
         }
         return eq;
     }
@@ -1545,8 +1545,7 @@ TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic1) {
     for(i = 0; i < NumTuples/ 2; ++i) {
         memcpy(alloc.allocate(), gen.get(), TupleSize);
     }
-    using iterator = typename IterableTableTupleChunks<Alloc, truth>::elastic_iterator;
-    iterator iter = iterator::begin(alloc);
+    auto iter = IterableTableTupleChunks<Alloc, truth>::elastic_iterator::begin(alloc);
     for (i = 0; i < NumTuples / 2; ++i) {                      // iterator advance, then insertion in a loop
         ASSERT_TRUE(Gen::same(*iter++, i));
         memcpy(alloc.allocate(), gen.get(), TupleSize);
@@ -1555,6 +1554,29 @@ TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic1) {
         ASSERT_TRUE(Gen::same(*iter++, i++));
     }
     ASSERT_EQ(NumTuples, i);
+}
+
+// Test that it should work with normal, compacting removals that only eats what had
+// been iterated
+TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic2) {
+    using Alloc = HookedCompactingChunks<TxnPreHook<NonCompactingChunks<EagerNonCompactingChunk>, HistoryRetainTrait<gc_policy::always>>>;
+    using Gen = StringGen<TupleSize>;
+    Alloc alloc(TupleSize);
+    Gen gen;
+    array<void const*, NumTuples> addresses;
+    size_t i;
+    for(i = 0; i < NumTuples; ++i) {
+        addresses[i] = memcpy(alloc.allocate(), gen.get(), TupleSize);
+    }
+    auto iter = IterableTableTupleChunks<Alloc, truth>::elastic_iterator::begin(alloc);
+//    for (i = 0; i < NumTuples;) {                      // iterator advance, then delete previous iterated tuple
+//        // expensive check
+//        until<IterableTableTupleChunks<Alloc, truth>::const_iterator>(
+//                static_cast<Alloc const&>(alloc),
+//                )
+//        ASSERT_TRUE(Gen::same(*iter++, i));
+//        alloc.remove(const_cast<void*>(addresses[i]));
+//    }
 }
 
 #endif

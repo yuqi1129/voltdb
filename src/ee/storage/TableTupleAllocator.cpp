@@ -521,13 +521,13 @@ inline void CompactingChunks::pop_back() {
 inline void CompactingChunks::freeze() {
     CompactingStorageTrait::freeze();
     if (last() != end()) {
-        m_frozenTxnBoundary = *last();
+        m_frozenTxnBoundaries = *this;
     }
 }
 
 inline void CompactingChunks::thaw() {
+    m_frozenTxnBoundaries.clear();
     CompactingStorageTrait::thaw();
-    m_frozenTxnBoundary = {};
 }
 
 inline void* CompactingChunks::allocate() {
@@ -632,6 +632,13 @@ inline void CompactingChunks::free(typename CompactingChunks::remove_direction d
                 if (last()->begin() == (last()->m_next = const_cast<void*>(p))) { // delete last chunk
                     pop_back();
                 }
+                if (frozen()) {
+                    if (empty()) {
+                        m_frozenTxnBoundaries.right() = {};
+                    } else {
+                        m_frozenTxnBoundaries.right() = *last();
+                    }
+                }
                 --m_allocs;
             }
             break;
@@ -647,8 +654,36 @@ inline typename CompactingChunks::TxnLeftBoundary& CompactingChunks::beginTxn() 
     return m_txnFirstChunk;
 }
 
-inline position_type const& CompactingChunks::endTxn_frozen() const noexcept {
-    return m_frozenTxnBoundary;
+inline CompactingChunks::FrozenTxnBoundaries::FrozenTxnBoundaries(ChunkList<CompactingChunk> const& l) noexcept {
+    if (! l.empty()) {
+        m_left = *l.begin();
+        m_right = *l.last();
+    }
+}
+
+inline void CompactingChunks::FrozenTxnBoundaries::clear() {
+    m_left = {};
+    m_right = {};
+}
+
+inline position_type const& CompactingChunks::FrozenTxnBoundaries::left() const noexcept {
+    return m_left;
+}
+
+inline position_type const& CompactingChunks::FrozenTxnBoundaries::right() const noexcept {
+    return m_right;
+}
+
+inline position_type& CompactingChunks::FrozenTxnBoundaries::right() noexcept {
+    return m_right;
+}
+
+inline typename CompactingChunks::FrozenTxnBoundaries const& CompactingChunks::frozenBoundaries() const noexcept {
+    return m_frozenTxnBoundaries;
+}
+
+inline position_type& CompactingChunks::frozenRight() noexcept {
+    return m_frozenTxnBoundaries.right();
 }
 
 namespace batch_remove_aid {
@@ -979,12 +1014,28 @@ struct iterator_begin<Cont, perm, iterator_view_type::txn, integral_constant<boo
     }
 };
 
+template<typename Chunks, iterator_view_type view, typename = typename Chunks::Compact>
+struct HasTxnInvisibleChunks {
+    inline constexpr bool operator()(Chunks const&) const noexcept {
+        return false;
+    }
+};
+
+template<typename Chunks>
+struct HasTxnInvisibleChunks<Chunks, iterator_view_type::snapshot, integral_constant<bool, true>> {
+    inline bool operator()(Chunks const& c) const noexcept {
+        return c.frozen() && (c.empty() ||
+                less_rolling(c.frozenBoundaries().left().chunkId(), c.begin()->id()));
+    }
+};
+
 template<typename Chunks, typename Tag, typename E>
 template<iterator_permission_type perm, iterator_view_type view>
 inline IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::iterator_type(
         typename IterableTableTupleChunks<Chunks, Tag, E>::template iterator_type<perm, view>::container_type src) :
     m_offset(src.tupleSize()), m_storage(src),
     m_iter(iterator_begin<typename remove_reference<container_type>::type, perm, view>()(src)),
+    m_hasTxnInvisibleChunks(HasTxnInvisibleChunks<Chunks, view>()(src)),
     m_cursor(const_cast<value_type>(m_iter == m_storage.end() ? nullptr : m_iter->begin())) {
     // paranoid type check
     static_assert(is_lvalue_reference<container_type>::value,
@@ -1055,25 +1106,32 @@ IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::operator po
  */
 template<typename ChunkList, typename Iter, iterator_view_type view, typename Comp>
 struct ChunkBoundary {
-    inline void const* operator()(ChunkList const&, Iter const& iter) const noexcept {
+    inline void const* operator()(ChunkList const&, Iter const& iter, bool) const noexcept {
         return iter->next();
     }
 };
 
 template<typename ChunkList, typename Iter>
 struct ChunkBoundary<ChunkList, Iter, iterator_view_type::snapshot, integral_constant<bool, true>> {
-    inline void const* operator()(ChunkList const& l, Iter const& iter) const noexcept {
-        if (l.last()->id() != iter->id()) {
-            return iter->end();
-        } else if (l.size() == 1) {            // single chunk list
-            // safe cast derived from Comp
-            auto const& pos = reinterpret_cast<CompactingChunks const&>(l).endTxn_frozen();
-            // invariant: if frozen, then must also be single chunk when freezing
-            vassert(pos.empty() || pos.chunkId() == iter->id());
-            return pos.empty() ?       // (not) frozen?
-                iter->next() : pos.address();
-        } else {
+    inline void const* operator()(ChunkList const& l, Iter const& iter, bool hasTxnInvisibleChunks) const noexcept {
+        auto const& boundaries = reinterpret_cast<CompactingChunks const&>(l).frozenBoundaries();
+        if (boundaries.left().empty()) {     // not frozen
             return iter->next();
+        } else {
+            auto const leftId = boundaries.left().chunkId(),
+                 rightId = boundaries.right().chunkId(),
+                 iterId = iter->id();
+            if(less_rolling(leftId, iterId)) {
+                // in chunk visible to frozen iterator only
+                return iter->end();
+            } else if (leftId == iterId) {
+                // in the left boundary of frozen state
+                return hasTxnInvisibleChunks ? iter->end() : boundaries.left().address();
+            } else if (rightId == iterId) {
+                return boundaries.right().address();
+            } else {
+                return iter->next();
+            }
         }
     }
 };
@@ -1119,7 +1177,7 @@ void IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::advanc
         if (! m_storage.empty() && m_iter != m_storage.end()) {
             const_cast<void*&>(m_cursor) =
                 reinterpret_cast<char*>(const_cast<void*>(m_cursor)) + m_offset;
-            if (m_cursor < boundary(m_storage, m_iter)) {
+            if (m_cursor < boundary(m_storage, m_iter, m_hasTxnInvisibleChunks)) {
                 finished = false;              // within chunk
             } else {
                 advance_iter(m_storage, m_iter); // cross chunk
@@ -1383,8 +1441,8 @@ template<typename Chunks, typename Tag, typename E>
 template<iterator_permission_type perm> inline bool
 IterableTableTupleChunks<Chunks, Tag, E>::hooked_iterator_type<perm>::drained() const noexcept {
     return super::drained() || (super::storage().frozen() &&
-            (super::storage().endTxn_frozen().address() == super::m_cursor ||
-             less<position_type>()(super::storage().endTxn_frozen(), *this)));
+            (super::storage().frozenBoundaries().right().address() == super::m_cursor ||
+             less<position_type>()(super::storage().frozenBoundaries().right(), *this)));
 }
 
 template<unsigned char NthBit, typename E>
@@ -1557,8 +1615,7 @@ inline void TxnPreHook<Alloc, Trait, C, E>::release(void const* src) {
 }
 
 template<typename Hook, typename E> inline
-HookedCompactingChunks<Hook, E>::HookedCompactingChunks(size_t s) noexcept :
-    CompactingChunks(s), Hook(s) {}
+HookedCompactingChunks<Hook, E>::HookedCompactingChunks(size_t s) noexcept : CompactingChunks(s), Hook(s) {}
 
 template<typename Hook, typename E>
 template<typename Tag> inline shared_ptr<typename

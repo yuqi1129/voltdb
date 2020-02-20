@@ -406,6 +406,16 @@ namespace voltdb {
                 void const*& next() noexcept;
                 bool empty() const noexcept;
             };
+            class FrozenTxnBoundaries final {
+                position_type m_left{}, m_right{};
+            public:
+                FrozenTxnBoundaries() noexcept = default;
+                FrozenTxnBoundaries(ChunkList<CompactingChunk> const&) noexcept;
+                position_type const& left() const noexcept;
+                position_type const& right() const noexcept;
+                position_type& right() noexcept;
+                void clear();
+            };
         private:
             template<typename, typename, typename> friend struct IterableTableTupleChunks;
             using list_type = ChunkList<CompactingChunk>;
@@ -415,7 +425,7 @@ namespace voltdb {
             size_t const m_id;                    // equivalent to "table id", to ensure injection relation to rw iterator
             char const* m_lastFreeFromHead = nullptr;  // arg of previous call to free(from_head, ?)
             TxnLeftBoundary m_txnFirstChunk;     // (moving) left boundary for txn
-            position_type m_frozenTxnBoundary{};  // (frozen) right boundary for txn
+            FrozenTxnBoundaries m_frozenTxnBoundaries{};  // frozen boundaries for txn
             // the end of allocations when snapshot started: (block id, end ptr)
             CompactingChunks(CompactingChunks const&) = delete;
             CompactingChunks& operator=(CompactingChunks const&) = delete;
@@ -460,6 +470,7 @@ namespace voltdb {
             } m_batched;
             using list_type::last;
             using list_type::pop_back;
+            position_type& frozenRight() noexcept;  // txn right boundary when freezing. Need to be adjusted for LW tail removal
         public:
             using Compact = integral_constant<bool, true>;
             CompactingChunks(size_t tupleSize) noexcept;
@@ -478,7 +489,7 @@ namespace voltdb {
             list_type::iterator const* find(size_t) const noexcept;
             TxnLeftBoundary const& beginTxn() const noexcept;   // (moving) txn left boundary
             TxnLeftBoundary& beginTxn() noexcept;               // NOTE: this should really be private. Use it with care!!!
-            position_type const& endTxn_frozen() const noexcept;                       // txn left boundary when freezing
+            FrozenTxnBoundaries const& frozenBoundaries() const noexcept;  // txn boundaries when freezing
             /**
              * Memory operations
              */
@@ -692,6 +703,8 @@ namespace voltdb {
                 using list_iterator_type = typename conditional<perm == iterator_permission_type::ro,
                       typename Chunks::list_type::const_iterator, typename Chunks::list_type::iterator>::type;
                 list_iterator_type m_iter;
+                bool const m_hasTxnInvisibleChunks;    // can be true only if in snapshot view, is frozen, and contains chunks
+                // only visible to snapshot
             protected:
                 using value_type = typename super::value_type;
                 // ctor arg type
