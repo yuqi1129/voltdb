@@ -41,7 +41,6 @@ public class UpdateClassesThread extends BenchmarkThread {
     final AtomicBoolean m_needsBlock = new AtomicBoolean(false);
     final byte[] jarData;
     final long cycletime = 10000;
-    final Random r = new Random(0);
     final float bigjarRatio;
     final float bigjarJavaRatio;
 

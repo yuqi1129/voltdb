@@ -49,7 +49,7 @@ function cleanall() {
 function jars() {
     ant
     alt-jars
-    if [[ -n "$BIGJARS" ]]; then
+    if [[ -n "$BIGJARS" || -z "$BIGJARS" ]]; then
         bigjars
     fi
 }
