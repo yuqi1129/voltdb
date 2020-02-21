@@ -1596,16 +1596,12 @@ TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic3) {
         addresses[i] = memcpy(alloc.allocate(), gen.get(), TupleSize);
     }
     auto iter = IterableTableTupleChunks<Alloc, truth>::elastic_iterator::begin(alloc);
-    for (i = 0; i < NumTuples && ! iter.drained(); ++i, ++iter) {
+    for (i = 0; i < (NumTuples - AllocsPerChunk) / 2 && ! iter.drained(); ++i, ++iter) {
         void const* pp = *iter;
         bool const matched = until<IterableTableTupleChunks<Alloc, truth>::const_iterator>(
                 static_cast<Alloc const&>(alloc), [this, pp] (void const* p) { return ! memcmp(pp, p, TupleSize); });
         ASSERT_TRUE(matched);
-        try {
-            alloc.remove(const_cast<void*>(addresses[NumTuples - i - 1]));
-        } catch (range_error const&) {
-            break;
-        }
+        alloc.remove(const_cast<void*>(addresses[NumTuples - i - 1]));
     }
     while (! iter.drained()) {
         void const* pp = *iter;
@@ -1670,6 +1666,33 @@ TEST_F(TableTupleAllocatorTest, TestElasticIterator_basic5) {
     }
     ASSERT_TRUE(iter.drained());
     ASSERT_EQ(NumTuples / 2, i);
+}
+
+TEST_F(TableTupleAllocatorTest, TestSnapshotIteratorOnNonFull1stChunk) {
+    using Alloc = HookedCompactingChunks<TxnPreHook<NonCompactingChunks<EagerNonCompactingChunk>, HistoryRetainTrait<gc_policy::always>>>;
+    using Gen = StringGen<TupleSize>;
+    Alloc alloc(TupleSize);
+    Gen gen;
+    array<void const*, NumTuples> addresses;
+    size_t i;
+    for (i = 0; i < NumTuples; ++i) {
+        addresses[i] = memcpy(alloc.allocate(), gen.get(), TupleSize);
+    }
+    // Remove last 10, making 1st chunk non-full
+    for (i = 0; i < 10; ++i) {
+        alloc.remove(const_cast<void*>(addresses[NumTuples - i - 1]));
+    }
+    alloc.template freeze<truth>();
+    i = 0;
+    auto const beg = addresses.begin(), end = prev(addresses.end(), 10);
+    fold<typename IterableTableTupleChunks<Alloc, truth>::const_hooked_iterator>(
+            static_cast<Alloc const&>(alloc), [this, &i, &beg, &end] (void const* p) {
+                ASSERT_TRUE(end != find(beg, end, p) ||
+                        end != find_if(beg, end, [p](void const* pp) { return ! memcmp(p, pp, TupleSize); }));
+                ++i;
+            });
+    ASSERT_EQ(i, NumTuples - 10);
+    alloc.thaw();
 }
 
 #endif
