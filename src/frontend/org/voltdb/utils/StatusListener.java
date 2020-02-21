@@ -46,7 +46,7 @@ public class StatusListener {
 
     private static final VoltLogger m_log = new VoltLogger("HOST");
 
-    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 4);
+    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 6);
     private static final int QUEUELIM = POOLSIZE + 4;
     private static final int CONNTMO = Integer.getInteger("STATUS_CONNECTION_TIMEOUT_SECONDS", 30) * 1000;
     private static final int REQTMO = Integer.getInteger("STATUS_REQUEST_TIMEOUT_SECONDS", 15) * 1000;

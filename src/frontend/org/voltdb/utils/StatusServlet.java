@@ -31,6 +31,9 @@ import org.voltdb.VoltDBInterface;
  */
 public class StatusServlet extends HttpServlet {
 
+    private static final String HDR_HOST = "Host";
+    private static final String HDR_CACHECTRL = "Cache-Control";
+    private static final String NO_CACHE = "no-cache";
     private static final String CONTENT_TYPE = "text/plain";
     private static final String ENCODING = "utf-8";
     private static final long serialVersionUID = 1L;
@@ -38,7 +41,8 @@ public class StatusServlet extends HttpServlet {
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response)
             throws IOException, ServletException {
-        response.setHeader("Host", StatusListener.instance().getHostHeader());
+        response.setHeader(HDR_HOST, StatusListener.instance().getHostHeader());
+        response.setHeader(HDR_CACHECTRL, NO_CACHE);
         response.setContentType(CONTENT_TYPE);
         response.setCharacterEncoding(ENCODING);
         response.setStatus(HttpServletResponse.SC_OK);
