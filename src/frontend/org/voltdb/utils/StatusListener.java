@@ -46,7 +46,7 @@ public class StatusListener {
 
     private static final VoltLogger m_log = new VoltLogger("HOST");
 
-    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 6);
+    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 4);
     private static final int QUEUELIM = POOLSIZE + 4;
     private static final int CONNTMO = Integer.getInteger("STATUS_CONNECTION_TIMEOUT_SECONDS", 30) * 1000;
     private static final int REQTMO = Integer.getInteger("STATUS_REQUEST_TIMEOUT_SECONDS", 15) * 1000;
@@ -69,21 +69,26 @@ public class StatusListener {
      * @param publicIntf  address to be returned in 'Host' header (if different)
      */
     public StatusListener(String intf, int port, String publicIntf) {
-
         assert port > 0 && port <= 65535;
         m_port = port;
         m_resolvedIntf = resolveInterface(intf, "");
         m_publicIntf = resolveInterface(publicIntf, m_resolvedIntf);
+        m_server = initServer(m_resolvedIntf, m_port);
+   }
 
-        QueuedThreadPool qtp = new QueuedThreadPool(POOLSIZE, 1, REQTMO,
-                                                    new LinkedBlockingQueue<>(QUEUELIM));
-        Server server = new Server(qtp);
+    private static Server initServer(String intf, int port) {
+        QueuedThreadPool qtp = null;
+        Server server = null;
         ServerConnector connector = null;
 
         try {
+            qtp = new QueuedThreadPool(POOLSIZE, 0, REQTMO, new LinkedBlockingQueue<>(QUEUELIM));
+            qtp.setName("status-thread-pool");
+            server = new Server(qtp);
+
             connector = new ServerConnector(server);
-            connector.setHost(m_resolvedIntf);
-            connector.setPort(m_port);
+            connector.setHost(intf);
+            connector.setPort(port);
             connector.setName("status-connector");
             connector.setIdleTimeout(CONNTMO);
             server.addConnector(connector);
@@ -99,15 +104,14 @@ public class StatusListener {
         }
 
         catch (Exception ex) {
-            logWarning("StatusListener: unexpected exception in init: %s", ex);
+            logError("StatusListener: unexpected exception in init: %s", ex);
             try { connector.close(); } catch (Exception e2) { }
-            try { m_server.destroy(); } catch (Exception e2) { }
-            m_server = null;
+            try { server.destroy(); } catch (Exception e2) { }
+	    try { qtp.join(); } catch (Exception e2) { }
             throw new RuntimeException("Failed to initialize status listener", ex);
         }
 
-        m_server = server;
-        singleton = this;
+        return server;
     }
 
     public String displayInterface() {
@@ -120,13 +124,15 @@ public class StatusListener {
 
     public void start() {
         synchronized (lock) {
-            if (m_server != null) { // ignore race with stop
+            if (m_server != null) {
                 try {
+                    singleton = this; // publish for use by servlets
                     m_server.start();
                     logInfo("Listening for status requests on %s", displayInterface());
                 } catch (Exception ex) {
                     logWarning("StatusListener: unexpected exception from start: %s", ex);
                     safeStop();
+                    singleton = null;
                     throw new RuntimeException("Failed to start status listener", ex);
                 }
             }
@@ -203,6 +209,10 @@ public class StatusListener {
             str = String.format(str, args);
         }
         m_log.log(level, str, null);
+    }
+
+    private static void logError(String str, Object... args) {
+        doLog(Level.ERROR, str, args);
     }
 
     private static void logWarning(String str, Object... args) {
