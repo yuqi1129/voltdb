@@ -978,7 +978,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                                                        config.m_statusPort,
                                                        config.m_publicInterface);
                 sl.start();
-                consoleLog.info("Status listener started on " + sl.displayInterface());
+                config.m_statusPort = sl.getAssignedPort();
+                consoleLog.info("Status listener started on port " + config.m_statusPort);
             }
 
             // Replay command line args that we can see

@@ -53,11 +53,11 @@ public class StatusListener {
     private static final int MAXQUERY = 256;
     private static final int MAXKEYS = 2;
 
-    private final int m_port;
     private final String m_resolvedIntf;
     private final String m_publicIntf;
 
     private Server m_server;
+    private ServerConnector m_connector;
     private String m_hostHeader;
     private static StatusListener singleton;
     private static final Object lock = new Object();
@@ -65,18 +65,16 @@ public class StatusListener {
     /**
      * Status listener:
      * @param intf  address of interface on which to listen for connections
-     * @param port  TCP port number
+     * @param port  TCP port number (zero for automatic)
      * @param publicIntf  address to be returned in 'Host' header (if different)
      */
     public StatusListener(String intf, int port, String publicIntf) {
-        assert port > 0 && port <= 65535;
-        m_port = port;
         m_resolvedIntf = resolveInterface(intf, "");
         m_publicIntf = resolveInterface(publicIntf, m_resolvedIntf);
-        m_server = initServer(m_resolvedIntf, m_port);
+        initServer(m_resolvedIntf, port);
    }
 
-    private static Server initServer(String intf, int port) {
+    private void initServer(String intf, int portReq) {
         QueuedThreadPool qtp = null;
         Server server = null;
         ServerConnector connector = null;
@@ -85,37 +83,60 @@ public class StatusListener {
             qtp = new QueuedThreadPool(POOLSIZE, 0, REQTMO, new LinkedBlockingQueue<>(QUEUELIM));
             qtp.setName("status-thread-pool");
             server = new Server(qtp);
-
-            connector = new ServerConnector(server);
-            connector.setHost(intf);
-            connector.setPort(port);
-            connector.setName("status-connector");
-            connector.setIdleTimeout(CONNTMO);
+            connector = initConnector(server, intf, portReq);
             server.addConnector(connector);
-
             ServletContextHandler ctxHandler = new ServletContextHandler();
             ctxHandler.setContextPath("/");
             ctxHandler.setMaxFormContentSize(MAXQUERY);
             ctxHandler.setMaxFormKeys(MAXKEYS);
             ctxHandler.addServlet(StatusServlet.class, "/status").setAsyncSupported(true);
             server.setHandler(ctxHandler);
-
-            connector.open();
         }
 
         catch (Exception ex) {
-            logError("StatusListener: unexpected exception in init: %s", ex);
+            logError("StatusListener: initialization failure: %s", ex);
             try { connector.close(); } catch (Exception e2) { }
             try { server.destroy(); } catch (Exception e2) { }
-	    try { qtp.join(); } catch (Exception e2) { }
+            try { qtp.join(); } catch (Exception e2) { }
             throw new RuntimeException("Failed to initialize status listener", ex);
         }
 
-        return server;
+        m_server = server;
+        m_connector = connector;
     }
 
-    public String displayInterface() {
-        return (m_resolvedIntf.isEmpty() ? "ANY" : m_resolvedIntf) + ':' + m_port;
+    private static ServerConnector initConnector(Server server, String intf, int portReq) {
+        int portLo = portReq, portHi = portReq;
+        if (portReq == 0) {
+            portLo = VoltDB.DEFAULT_STATUS_PORT;
+            portHi = portLo + 99; // a reasonable range to try
+        }
+        for (int port=portLo; port<=portHi; port++) {
+            try {
+                ServerConnector connector = new ServerConnector(server);
+                connector.setHost(intf);
+                connector.setPort(port);
+                connector.setName("status-connector");
+                connector.setIdleTimeout(CONNTMO);
+                connector.open();
+                return connector;
+            }
+            catch (IOException ex) {
+                logDebug("Unable to open port %s: %s", port, ex);
+            }
+        }
+        String fail;
+        if (portLo == portHi) {
+            fail = String.format("Unable to open port %s", portLo);
+        }
+        else {
+            fail = String.format("Unable to open any port in range %s to %s", portLo, portHi);
+        }
+        throw new RuntimeException(fail);
+    }
+
+    public int getAssignedPort() {
+        return m_connector != null ? m_connector.getPort() : -1;
     }
 
     public static StatusListener instance() {
@@ -128,8 +149,9 @@ public class StatusListener {
                 try {
                     singleton = this; // publish for use by servlets
                     m_server.start();
-                    logInfo("Listening for status requests on %s", displayInterface());
-                } catch (Exception ex) {
+                    logInfo("Listening for status requests on port %s", getAssignedPort());
+                }
+                catch (Exception ex) {
                     logWarning("StatusListener: unexpected exception from start: %s", ex);
                     safeStop();
                     singleton = null;
@@ -154,15 +176,18 @@ public class StatusListener {
             try {
                 m_server.stop();
                 m_server.join();
-            } catch (Exception ex) {
+            }
+            catch (Exception ex) {
                 logWarning("StatusListener: unexpected exception from stop/join: %s", ex);
             }
             try {
                 m_server.destroy();
-            } catch (Exception ex) {
+            }
+            catch (Exception ex) {
                 logWarning("StatusListener: unexpected exception from destroy: %s", ex);
             }
             m_server = null;
+            m_connector = null;
         }
     }
 
@@ -175,7 +200,7 @@ public class StatusListener {
                 intf = getLocalAddress().getHostAddress();
                 logInfo("Using %s for host header", intf);
             }
-            m_hostHeader = intf + ':' + m_port;
+            m_hostHeader = intf + ':' + m_connector.getPort();
         }
         return m_hostHeader;
     }
@@ -220,6 +245,10 @@ public class StatusListener {
     }
 
     private static void logInfo(String str, Object... args) {
+        doLog(Level.INFO, str, args);
+    }
+
+    private static void logDebug(String str, Object... args) {
         doLog(Level.INFO, str, args);
     }
 }

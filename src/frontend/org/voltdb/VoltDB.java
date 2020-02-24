@@ -87,6 +87,7 @@ public class VoltDB {
     public static final int DEFAULT_DR_PORT = 5555;
     public static final int DEFAULT_HTTP_PORT = 8080;
     public static final int DEFAULT_HTTPS_PORT = 8443;
+    public static final int AUTO_STATUS_PORT = 0;
     public static final int DEFAULT_STATUS_PORT = 11780;
     public static final int BACKWARD_TIME_FORGIVENESS_WINDOW_MS = 3000;
 
@@ -216,8 +217,8 @@ public class VoltDB {
 
         public String m_publicInterface = "";
 
-        /** Status monitoring interfaace and port */
-        public int m_statusPort = VoltDB.DEFAULT_STATUS_PORT;
+        /** Status monitoring interface and port */
+        public int m_statusPort = AUTO_STATUS_PORT;
         public String m_statusInterface = "";
 
         /** running the enterprise version? */
@@ -466,13 +467,14 @@ public class VoltDB {
                     }
                 } else if (arg.equals("statusport")) {
                     String portStr = args[++i];
-                    if (portStr.indexOf(':') != -1) {
-                        HostAndPort hap = MiscUtils.getHostAndPortFromHostnameColonPort(portStr, VoltDB.DEFAULT_STATUS_PORT);
-                        m_statusInterface = hap.getHost();
-                        m_statusPort = hap.getPort();
-                    } else {
+                    try { // port only
                         m_statusInterface = "";
                         m_statusPort = Integer.parseInt(portStr);
+                    }
+                    catch (NumberFormatException ex) { // interface only, or interface:port
+                        HostAndPort hap = MiscUtils.getHostAndPortFromHostnameColonPort(portStr, AUTO_STATUS_PORT);
+                        m_statusInterface = hap.getHost();
+                        m_statusPort = hap.getPort();
                     }
                 } else if (arg.startsWith("zkport")) {
                     //zkport should be default to loopback but for openshift needs to be specified as loopback is unavalable.
