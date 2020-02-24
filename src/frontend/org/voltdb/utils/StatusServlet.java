@@ -50,10 +50,18 @@ public class StatusServlet extends HttpServlet {
     }
 
     private String theStatus() {
+        StringBuffer text = new StringBuffer(256);
         VoltDBInterface instance = VoltDB.instance();
-        return String.format("pid: %d\r\nnodeState: %s\r\noperMode: %s\r\n",
-                             instance.getVoltPid(),
-                             instance.getNodeState(),
-                             instance.getMode());
+        addValue(text, "pid", instance.getVoltPid());
+        addValue(text, "nodeState", instance.getNodeState());
+        addValue(text, "operMode", instance.getMode());
+        return text.toString();
+    }
+
+    private <T> void addValue(StringBuffer text, String name, T value) {
+        text.append(name)
+            .append(": ")
+            .append(value)
+            .append("\r\n");
     }
 }
