@@ -22,6 +22,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.json_voltpatches.JSONObject;
 import org.voltdb.VoltDB;
 import org.voltdb.VoltDBInterface;
 
@@ -34,8 +35,8 @@ public class StatusServlet extends HttpServlet {
     private static final String HDR_HOST = "Host";
     private static final String HDR_CACHECTRL = "Cache-Control";
     private static final String NO_CACHE = "no-cache";
-    private static final String CONTENT_TYPE = "text/plain";
-    private static final String ENCODING = "utf-8";
+    private static final String JSON_CONTENT = "application/json";
+    private static final String UTF8_ENCODING = "utf-8";
     private static final long serialVersionUID = 1L;
 
     @Override
@@ -43,25 +44,23 @@ public class StatusServlet extends HttpServlet {
             throws IOException, ServletException {
         response.setHeader(HDR_HOST, StatusListener.instance().getHostHeader());
         response.setHeader(HDR_CACHECTRL, NO_CACHE);
-        response.setContentType(CONTENT_TYPE);
-        response.setCharacterEncoding(ENCODING);
+        response.setContentType(JSON_CONTENT);
+        response.setCharacterEncoding(UTF8_ENCODING);
         response.setStatus(HttpServletResponse.SC_OK);
         response.getWriter().print(theStatus());
     }
 
-    private String theStatus() {
-        StringBuffer text = new StringBuffer(256);
-        VoltDBInterface instance = VoltDB.instance();
-        addValue(text, "pid", instance.getVoltPid());
-        addValue(text, "nodeState", instance.getNodeState());
-        addValue(text, "operMode", instance.getMode());
-        return text.toString();
-    }
-
-    private <T> void addValue(StringBuffer text, String name, T value) {
-        text.append(name)
-            .append(": ")
-            .append(value)
-            .append("\r\n");
+    private String theStatus() throws ServletException {
+        try {
+            VoltDBInterface instance = VoltDB.instance();
+            JSONObject json = new JSONObject();
+            json.put("pid", instance.getVoltPid());
+            json.put("nodeState", instance.getNodeState());
+            json.put("operMode", instance.getMode());
+            return json.toString();
+        }
+        catch (Exception ex) {
+            throw new ServletException(ex);
+        }
     }
 }
