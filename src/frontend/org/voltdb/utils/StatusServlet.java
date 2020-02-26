@@ -58,10 +58,18 @@ public class StatusServlet extends HttpServlet {
             json.put("hostId", instance.getMyHostId());
             json.put("nodeState", instance.getNodeState());
             json.put("operMode", instance.getMode());
+            json.put("startup", startStuff(instance));
             return json.toString();
         }
         catch (Exception ex) {
             throw new ServletException(ex);
         }
+    }
+
+    private JSONObject startStuff(VoltDBInterface instance) throws Exception {
+        JSONObject json = new JSONObject();
+        json.put("action", instance.getStartAction());
+        json.put("complete", instance.getStartActionComplete());
+        return json;
     }
 }

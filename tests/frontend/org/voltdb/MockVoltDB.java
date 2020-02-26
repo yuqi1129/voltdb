@@ -493,6 +493,16 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
+    public StartAction getStartAction() {
+        return voltconfig.m_startAction;
+    }
+
+    @Override
+    public boolean getStartActionComplete() {
+        return true;
+    }
+
+    @Override
     public void startSampler()
     {
     }

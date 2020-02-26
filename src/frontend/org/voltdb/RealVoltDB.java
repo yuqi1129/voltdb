@@ -453,8 +453,21 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
         }
     }
 
-    StartAction getStartAction() {
+    @Override
+    public StartAction getStartAction() {
         return m_config.m_startAction;
+    }
+
+    private volatile boolean m_startActionComplete = false;
+
+    private void setStartActionComplete() {
+        m_startActionComplete = true;
+        hostLog.debug("Start action completed");
+    }
+
+    @Override
+    public boolean getStartActionComplete() {
+        return m_startActionComplete;
     }
 
     private long m_recoveryStartTime;
@@ -1184,6 +1197,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             // Potential wait here as mesh is built.
             MeshProber.Determination determination = buildClusterMesh(readDepl);
             if (m_config.m_startAction == StartAction.PROBE) {
+                hostLog.debug("Start action determined to be " + determination.startAction);
                 String action = "Starting a new database cluster";
                 if (determination.startAction.doesRejoin()) {
                     action = "Rejoining a running cluster";
@@ -4398,6 +4412,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 String actionName = m_joining ? "join" : "rejoin";
                 m_joining = false;
                 consoleLog.info(String.format("Node %s completed", actionName));
+                setStartActionComplete();
             }
 
             //start MigratePartitionLeader task
@@ -4599,6 +4614,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 // send hostUp trap
                 m_snmp.hostUp("host is now a cluster member");
             }
+            setStartActionComplete();
 
             // Start listening on the DR ports
             createDRConsumerIfNeeded();
@@ -4684,6 +4700,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 consoleLog.info(String.format("Node %s completed", actionName));
                 m_rejoinTruncationReqId = null;
                 m_rejoining = false;
+                setStartActionComplete();
             }
             else {
                 // If we saw some other truncation request ID, then try the same one again.  As long as we
