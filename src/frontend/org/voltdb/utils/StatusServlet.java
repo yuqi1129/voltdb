@@ -55,6 +55,7 @@ public class StatusServlet extends HttpServlet {
             VoltDBInterface instance = VoltDB.instance();
             JSONObject json = new JSONObject();
             json.put("pid", instance.getVoltPid());
+            json.put("hostId", instance.getMyHostId());
             json.put("nodeState", instance.getNodeState());
             json.put("operMode", instance.getMode());
             return json.toString();

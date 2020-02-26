@@ -296,7 +296,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     @SuppressWarnings("unused")
     private InitiatorStats m_initiatorStats;
     private LiveClientsStats m_liveClientsStats = null;
-    int m_myHostId;
+    int m_myHostId = -1; // not valid until we have a mesh
     String m_httpPortExtraLogMessage = null;
     boolean m_jsonEnabled;
 
@@ -1181,6 +1181,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             clusterSettings.store();
             m_clusterSettings.set(clusterSettings, 1);
 
+            // Potential wait here as mesh is built.
             MeshProber.Determination determination = buildClusterMesh(readDepl);
             if (m_config.m_startAction == StartAction.PROBE) {
                 String action = "Starting a new database cluster";
@@ -3321,6 +3322,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
         hostLog.info(String.format("Host id of this node is: %d", m_myHostId));
         consoleLog.info(String.format("Host id of this node is: %d", m_myHostId));
 
+        // This is where we wait
         MeshProber.Determination determination = criteria.waitForDetermination();
 
         // paused is determined in the mesh formation exchanged
@@ -4458,6 +4460,12 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     public NodeState getNodeState()
     {
         return m_statusTracker.get();
+    }
+
+    @Override
+    public int getMyHostId()
+    {
+        return m_myHostId;
     }
 
     @Override

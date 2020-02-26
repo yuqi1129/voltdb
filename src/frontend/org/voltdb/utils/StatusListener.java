@@ -19,7 +19,7 @@ package org.voltdb.utils;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -80,7 +80,7 @@ public class StatusListener {
         ServerConnector connector = null;
 
         try {
-            qtp = new QueuedThreadPool(POOLSIZE, 0, REQTMO, new LinkedBlockingQueue<>(QUEUELIM));
+            qtp = new QueuedThreadPool(POOLSIZE, 0, REQTMO, new ArrayBlockingQueue<>(QUEUELIM));
             qtp.setName("status-thread-pool");
             server = new Server(qtp);
             connector = initConnector(server, intf, portReq);
@@ -148,11 +148,13 @@ public class StatusListener {
             if (m_server != null) {
                 try {
                     singleton = this; // publish for use by servlets
+                    logInfo("Starting status listener on port %s", getAssignedPort());
                     m_server.start();
                     logInfo("Listening for status requests on port %s", getAssignedPort());
                 }
                 catch (Exception ex) {
                     logWarning("StatusListener: unexpected exception from start: %s", ex);
+                    dumpThreadInfo();
                     safeStop();
                     singleton = null;
                     throw new RuntimeException("Failed to start status listener", ex);
@@ -188,6 +190,18 @@ public class StatusListener {
             }
             m_server = null;
             m_connector = null;
+        }
+    }
+
+    private void dumpThreadInfo() {
+        try {
+            QueuedThreadPool qtp = (QueuedThreadPool) m_server.getThreadPool();
+            logInfo("Thread pool: min %d, max %d, idle %d, busy %d",
+                    qtp.getMinThreads(), qtp.getMaxThreads(),
+                    qtp.getIdleThreads(), qtp.getBusyThreads());
+        }
+        catch (Exception ex) {
+            logInfo("Can't dump thread pool info: %s", ex);
         }
     }
 

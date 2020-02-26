@@ -18,19 +18,32 @@ package org.voltdb;
 
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.voltcore.logging.VoltLogger;
 import org.voltdb.common.NodeState;
 
 import com.google_voltpatches.common.base.Supplier;
 
 /**
- * Class that aides in the tracking of a VoltDB node state.
+ * Class that aids in the tracking of a VoltDB node state.
  */
-public class NodeStateTracker extends AtomicReference<NodeState> {
-    public NodeStateTracker() {
-        super(NodeState.INITIALIZING);
+public class NodeStateTracker {
+
+    private static final VoltLogger logger = new VoltLogger("NODE");
+
+    private final AtomicReference<NodeState> nodeState =
+        new AtomicReference<>(NodeState.INITIALIZING);
+
+    public void set(NodeState newState) {
+        NodeState prevState = nodeState.getAndSet(newState);
+        // TODO - make this debug?
+        logger.info(String.format("State change, %s => %s", prevState, newState));
+    }
+
+    public NodeState get() {
+        return nodeState.get();
     }
 
     public Supplier<NodeState> getSupplier() {
-        return this::get;
+        return nodeState::get;
     }
 }

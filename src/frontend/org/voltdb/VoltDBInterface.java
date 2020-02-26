@@ -246,6 +246,8 @@ public interface VoltDBInterface
 
     public NodeState getNodeState();
 
+    public int getMyHostId();
+
     public int getVoltPid();
 
     public void promoteToMaster();

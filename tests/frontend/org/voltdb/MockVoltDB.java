@@ -640,6 +640,12 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
+    public int getMyHostId()
+    {
+        return m_hostId;
+    }
+
+    @Override
     public int getVoltPid()
     {
         return 9999; // no-one cares
