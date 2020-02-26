@@ -46,8 +46,8 @@ public class StatusListener {
 
     private static final VoltLogger m_log = new VoltLogger("HOST");
 
-    private static final int POOLSIZE = Integer.getInteger("STATUS_POOL_SIZE", 4);
-    private static final int QUEUELIM = POOLSIZE + 4;
+    private static final int POOLSIZE = Integer.getInteger("STATUS_THREAD_POOL_SIZE", 10);
+    private static final int QUEUELIM = POOLSIZE + 6;
     private static final int CONNTMO = Integer.getInteger("STATUS_CONNECTION_TIMEOUT_SECONDS", 30) * 1000;
     private static final int REQTMO = Integer.getInteger("STATUS_REQUEST_TIMEOUT_SECONDS", 15) * 1000;
     private static final int MAXQUERY = 256;
@@ -149,6 +149,7 @@ public class StatusListener {
                 try {
                     singleton = this; // publish for use by servlets
                     logInfo("Starting status listener on port %s", getAssignedPort());
+                    dumpThreadInfo();
                     m_server.start();
                     logInfo("Listening for status requests on port %s", getAssignedPort());
                 }
@@ -196,9 +197,9 @@ public class StatusListener {
     private void dumpThreadInfo() {
         try {
             QueuedThreadPool qtp = (QueuedThreadPool) m_server.getThreadPool();
-            logInfo("Thread pool: min %d, max %d, idle %d, busy %d",
-                    qtp.getMinThreads(), qtp.getMaxThreads(),
-                    qtp.getIdleThreads(), qtp.getBusyThreads());
+            logInfo("%s: min %d, max %d, reserved %d, idle %d, busy %d",
+                    qtp.getName(), qtp.getMinThreads(), qtp.getMaxThreads(),
+                    qtp.getReservedThreads(), qtp.getIdleThreads(), qtp.getBusyThreads());
         }
         catch (Exception ex) {
             logInfo("Can't dump thread pool info: %s", ex);
