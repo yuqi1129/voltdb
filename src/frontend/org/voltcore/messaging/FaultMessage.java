@@ -41,6 +41,7 @@ public final class FaultMessage extends VoltMessage {
         this.decided = false;
     }
 
+    // Constructor for relaying the node fault to nodes that don't witness the failure directly
     public FaultMessage(final long reportingSite,
             final long failedSite, final Set<Long> survivors) {
         this.failedSite = failedSite;
@@ -50,6 +51,8 @@ public final class FaultMessage extends VoltMessage {
         this.decided = false;
     }
 
+    // Constructor for relaying the node fault to nodes that don't witness the failure directly,
+    // with an extra flag of global decision is made or not
     public FaultMessage(
             final long reportingSite,
             final long failedSite,

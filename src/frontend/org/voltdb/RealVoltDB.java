@@ -1936,14 +1936,17 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
         //The host which initiates MigratePartitionLeader is down before it gets chance to notify new leader that
         //all sp transactions are drained.
         //Then reset the MigratePartitionLeader status on the new leader to allow it process transactions as leader
+        Initiator initiator = m_iv2Initiators.get(migratePartitionLeaderInfo.getPartitionId());
         if (failedHosts.contains(oldHostId) && newHostId == m_messenger.getHostId()) {
-            Initiator initiator = m_iv2Initiators.get(migratePartitionLeaderInfo.getPartitionId());
             hostLog.info("The host that initiated @MigratePartitionLeader possibly went down before migration completed. Reset MigratePartitionLeader status on "
                           + CoreUtils.hsIdToString(initiator.getInitiatorHSId()));
             ((SpInitiator)initiator).setMigratePartitionLeaderStatus(oldHostId);
             VoltZK.removeMigratePartitionLeaderInfo(m_messenger.getZK());
         } else if (failedHosts.contains(newHostId) && oldHostId == m_messenger.getHostId()) {
             //The new leader is down, on old leader host:
+            //Flip the initiator mailbox state to allow in-fly transactions in.
+            //MigrateState will be NONE eventually once the checkpoint is reached, no need to change here.
+            ((SpInitiator)initiator).reinstateLeaderState();
             VoltZK.removeMigratePartitionLeaderInfo(m_messenger.getZK());
         }
     }

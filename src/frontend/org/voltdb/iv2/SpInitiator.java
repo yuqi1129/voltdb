@@ -362,6 +362,10 @@ public class SpInitiator extends BaseInitiator<SpScheduler> implements Promotabl
         m_initiatorMailbox.deliver(message);
     }
 
+    public void reinstateLeaderState() {
+        m_initiatorMailbox.reinstateLeaderState();
+    }
+
     public boolean isLeader() {
         return m_scheduler.isLeader();
     }

@@ -410,7 +410,7 @@ public class InitiatorMailbox implements Mailbox
 
         SpScheduler scheduler = (SpScheduler)m_scheduler;
         scheduler.checkPointMigratePartitionLeader();
-        scheduler.m_isLeader = false;
+        m_scheduler.setLeaderState(false);
         m_newLeaderHSID.set(newLeaderHSId);
         m_leaderMigrationState.set(LeaderMigrationState.STARTED);
 
@@ -757,6 +757,11 @@ public class InitiatorMailbox implements Mailbox
         tmLog.info("MigratePartitionLeader previous leader " + CoreUtils.hsIdToString(m_hsId) + " notifies new leader " +
                 CoreUtils.hsIdToString(m_newLeaderHSID.get()) + " transactions are drained." + " state:" + m_leaderMigrationState);
         m_newLeaderHSID.set(Long.MIN_VALUE);
+    }
+
+    public void reinstateLeaderState() {
+        m_scheduler.setLeaderState(true);
+        m_repairLog.setLeaderState(true);
     }
 
     public ZooKeeper getZK() {
