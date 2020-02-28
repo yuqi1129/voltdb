@@ -498,11 +498,6 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
-    public boolean getStartActionComplete() {
-        return true;
-    }
-
-    @Override
     public void startSampler()
     {
     }
@@ -647,6 +642,12 @@ public class MockVoltDB implements VoltDBInterface
     public NodeState getNodeState()
     {
         return NodeState.UP; // a small lie
+    }
+
+    @Override
+    public boolean getNodeInitComplete()
+    {
+        return true;
     }
 
     @Override

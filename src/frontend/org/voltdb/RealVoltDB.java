@@ -458,18 +458,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
         return m_config.m_startAction;
     }
 
-    private volatile boolean m_startActionComplete = false;
-
-    private void setStartActionComplete() {
-        m_startActionComplete = true;
-        hostLog.debug("Start action completed");
-    }
-
-    @Override
-    public boolean getStartActionComplete() {
-        return m_startActionComplete;
-    }
-
     private long m_recoveryStartTime;
 
     CommandLog m_commandLog;
@@ -3937,11 +3925,11 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             boolean requiresNewExportGeneration,
             boolean hasSecurityUserChange)
     {
-        try {
-            synchronized(m_catalogUpdateLock) {
+        synchronized(m_catalogUpdateLock) {
+            NodeState prevNodeState = m_statusTracker.set(NodeState.UPDATING);
+            try {
                 final ReplicationRole oldRole = getReplicationRole();
 
-                m_statusTracker.set(NodeState.UPDATING);
                 if (m_catalogContext.catalogVersion != expectedCatalogVersion) {
                     if (m_catalogContext.catalogVersion < expectedCatalogVersion) {
                         throw new RuntimeException("Trying to update main catalog context with diff " +
@@ -4113,10 +4101,11 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 checkThreadsSanity();
 
                 return m_catalogContext;
+            } finally {
+                // Set node state to what it was on entry
+                //  (still under synchronization)
+                m_statusTracker.set(prevNodeState);
             }
-        } finally {
-            //Set state back to UP
-            m_statusTracker.set(NodeState.UP);
         }
     }
 
@@ -4412,7 +4401,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 String actionName = m_joining ? "join" : "rejoin";
                 m_joining = false;
                 consoleLog.info(String.format("Node %s completed", actionName));
-                setStartActionComplete();
             }
 
             //start MigratePartitionLeader task
@@ -4421,10 +4409,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             VoltDB.crashLocalVoltDB("Unable to log host rejoin completion to ZK", true, e);
         }
         hostLog.info("Logging host rejoin completion to ZK");
-        m_statusTracker.set(NodeState.UP);
-        Object args[] = { (VoltDB.instance().getMode() == OperationMode.PAUSED) ? "PAUSED" : "NORMAL"};
-        consoleLog.l7dlog( Level.INFO, LogKeys.host_VoltDB_ServerOpMode.name(), args, null);
-        consoleLog.l7dlog( Level.INFO, LogKeys.host_VoltDB_ServerCompletedInitialization.name(), null, null);
+        initializationIsComplete();
     }
 
     @Override
@@ -4475,6 +4460,12 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     public NodeState getNodeState()
     {
         return m_statusTracker.get();
+    }
+
+    @Override
+    public boolean getNodeInitComplete()
+    {
+        return m_statusTracker.getInitComplete();
     }
 
     @Override
@@ -4614,7 +4605,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 // send hostUp trap
                 m_snmp.hostUp("host is now a cluster member");
             }
-            setStartActionComplete();
 
             // Start listening on the DR ports
             createDRConsumerIfNeeded();
@@ -4637,13 +4627,10 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 VoltDB.crashLocalVoltDB("HTTP service unable to bind to port.", true, e);
             }
 
-            // Set m_mode to RUNNING
+            // Set m_mode to RUNNING, and initialization complete
             databaseIsRunning();
+            initializationIsComplete();
 
-            Object args[] = { (m_mode == OperationMode.PAUSED) ? "PAUSED" : "NORMAL"};
-            consoleLog.l7dlog( Level.INFO, LogKeys.host_VoltDB_ServerOpMode.name(), args, null);
-            consoleLog.l7dlog( Level.INFO, LogKeys.host_VoltDB_ServerCompletedInitialization.name(), null, null);
-            m_statusTracker.set(NodeState.UP);
         } else {
             // Set m_mode to RUNNING
             databaseIsRunning();
@@ -4661,6 +4648,18 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 VoltDB.crashLocalVoltDB("Failed to start elastic services", false, e);
             }
         }
+    }
+
+    /*
+     * Sets various indicators to show that initialization is complete,
+     * including logging that event to the console.
+     */
+    private void initializationIsComplete() {
+        Object args[] = { m_mode == OperationMode.PAUSED ? "PAUSED" : "NORMAL"};
+        consoleLog.l7dlog(Level.INFO, LogKeys.host_VoltDB_ServerOpMode.name(), args, null);
+        consoleLog.l7dlog(Level.INFO, LogKeys.host_VoltDB_ServerCompletedInitialization.name(), null, null);
+        m_statusTracker.set(NodeState.UP);
+        m_statusTracker.setInitComplete();
     }
 
     private void databaseIsRunning() {
@@ -4700,7 +4699,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 consoleLog.info(String.format("Node %s completed", actionName));
                 m_rejoinTruncationReqId = null;
                 m_rejoining = false;
-                setStartActionComplete();
             }
             else {
                 // If we saw some other truncation request ID, then try the same one again.  As long as we

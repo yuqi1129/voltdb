@@ -16,6 +16,7 @@
  */
 package org.voltdb;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.voltcore.logging.VoltLogger;
@@ -25,18 +26,29 @@ import com.google_voltpatches.common.base.Supplier;
 
 /**
  * Class that aids in the tracking of a VoltDB node state.
+ *
+ * As well as the overall state, there is a set-once
+ * flag that marks the point at which VoltDB considers
+ * intiialization to be complete; this is for convenience
+ * of status reporting. The node state is now UP; however,
+ * we have an explicit initialization-complete indication
+ * because there are places in the code that momentarily
+ * set the state to UP during initalization.
  */
 public class NodeStateTracker {
 
-    private static final VoltLogger logger = new VoltLogger("NODE");
+    private static final VoltLogger logger = new VoltLogger("NODESTATE");
 
     private final AtomicReference<NodeState> nodeState =
         new AtomicReference<>(NodeState.INITIALIZING);
 
-    public void set(NodeState newState) {
+    private final AtomicBoolean initComplete =
+        new AtomicBoolean(false);
+
+    public NodeState set(NodeState newState) {
         NodeState prevState = nodeState.getAndSet(newState);
-        // TODO - make this debug?
         logger.info(String.format("State change, %s => %s", prevState, newState));
+        return prevState;
     }
 
     public NodeState get() {
@@ -45,5 +57,13 @@ public class NodeStateTracker {
 
     public Supplier<NodeState> getSupplier() {
         return nodeState::get;
+    }
+
+    public void setInitComplete() {
+        initComplete.set(true);
+    }
+
+    public boolean getInitComplete() {
+        return initComplete.get();
     }
 }

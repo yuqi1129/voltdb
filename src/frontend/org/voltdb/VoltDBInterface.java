@@ -117,9 +117,6 @@ public interface VoltDBInterface
     public void setShuttingdown(boolean shuttingdown);
     boolean isMpSysprocSafeToExecute(long txnId);
 
-    public StartAction getStartAction();
-    public boolean getStartActionComplete();
-
     public void startSampler();
 
     public VoltDB.Configuration getConfig();
@@ -247,7 +244,11 @@ public interface VoltDBInterface
 
     public OperationMode getStartMode();
 
+    public StartAction getStartAction();
+
     public NodeState getNodeState();
+
+    public boolean getNodeInitComplete();
 
     public int getMyHostId();
 
