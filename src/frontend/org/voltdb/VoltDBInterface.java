@@ -248,7 +248,7 @@ public interface VoltDBInterface
 
     public NodeState getNodeState();
 
-    public boolean getNodeInitComplete();
+    public boolean getNodeStartupComplete();
 
     public int getMyHostId();
 

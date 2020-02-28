@@ -645,7 +645,7 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
-    public boolean getNodeInitComplete()
+    public boolean getNodeStartupComplete()
     {
         return true;
     }

@@ -27,13 +27,14 @@ import com.google_voltpatches.common.base.Supplier;
 /**
  * Class that aids in the tracking of a VoltDB node state.
  *
- * As well as the overall state, there is a set-once
+ * As well as the actual node state, there is a set-once
  * flag that marks the point at which VoltDB considers
- * intiialization to be complete; this is for convenience
- * of status reporting. The node state is now UP; however,
- * we have an explicit initialization-complete indication
- * because there are places in the code that momentarily
- * set the state to UP during initalization.
+ * startup to be complete; this is for the convenience
+ * of status reporting. The node state will be UP; however,
+ * we have an explicit startup-complete indication because
+ * in some cases we need to defer the indication until
+ * log replay is complete. The flag offers a single point
+ * of truth as to server startup.
  */
 public class NodeStateTracker {
 
@@ -42,7 +43,7 @@ public class NodeStateTracker {
     private final AtomicReference<NodeState> nodeState =
         new AtomicReference<>(NodeState.INITIALIZING);
 
-    private final AtomicBoolean initComplete =
+    private final AtomicBoolean startupComplete =
         new AtomicBoolean(false);
 
     public NodeState set(NodeState newState) {
@@ -59,11 +60,14 @@ public class NodeStateTracker {
         return nodeState::get;
     }
 
-    public void setInitComplete() {
-        initComplete.set(true);
+    public void setStartupComplete() {
+        boolean prev = startupComplete.getAndSet(true);
+        if (!prev) {
+            logger.info("Server is now fully started");
+        }
     }
 
-    public boolean getInitComplete() {
-        return initComplete.get();
+    public boolean getStartupComplete() {
+        return startupComplete.get();
     }
 }

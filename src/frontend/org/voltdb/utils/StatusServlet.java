@@ -57,9 +57,9 @@ public class StatusServlet extends HttpServlet {
             json.put("pid", instance.getVoltPid());
             json.put("hostId", instance.getMyHostId());
             json.put("nodeState", instance.getNodeState());
-            json.put("operMode", instance.getMode());
+            json.put("clusterState", instance.getMode());
             json.put("startAction", instance.getStartAction());
-            json.put("initComplete", instance.getNodeInitComplete());
+            json.put("startComplete", instance.getNodeStartupComplete());
             return json.toString();
         }
         catch (Exception ex) {

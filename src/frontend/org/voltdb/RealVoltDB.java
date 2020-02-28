@@ -1185,7 +1185,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             // Potential wait here as mesh is built.
             MeshProber.Determination determination = buildClusterMesh(readDepl);
             if (m_config.m_startAction == StartAction.PROBE) {
-                hostLog.debug("Start action determined to be " + determination.startAction);
                 String action = "Starting a new database cluster";
                 if (determination.startAction.doesRejoin()) {
                     action = "Rejoining a running cluster";
@@ -1194,7 +1193,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 } else if (determination.startAction.doesRecover()) {
                     action = "Restarting the database cluster from the command logs";
                 }
-                hostLog.info(action);
+                hostLog.info(String.format("%s [%s]", action, determination.startAction));
                 consoleLog.info(action);
             }
 
@@ -4372,6 +4371,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                     megabytesPerSecond + " megabytes/sec");
         }
 
+        boolean allDone = false;
         try {
             final ZooKeeper zk = m_messenger.getZK();
             boolean logRecoveryCompleted = false;
@@ -4400,7 +4400,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
 
                 String actionName = m_joining ? "join" : "rejoin";
                 m_joining = false;
-                consoleLog.info(String.format("Node %s completed", actionName));
+                consoleLog.info(String.format("Node %s completed", actionName)); // onRejoinCompletion
+                allDone = true;
             }
 
             //start MigratePartitionLeader task
@@ -4408,8 +4409,9 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
         } catch (Exception e) {
             VoltDB.crashLocalVoltDB("Unable to log host rejoin completion to ZK", true, e);
         }
+
         hostLog.info("Logging host rejoin completion to ZK");
-        initializationIsComplete();
+        initializationIsComplete(allDone); // onRejoinCompletion
     }
 
     @Override
@@ -4463,9 +4465,9 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     }
 
     @Override
-    public boolean getNodeInitComplete()
+    public boolean getNodeStartupComplete()
     {
-        return m_statusTracker.getInitComplete();
+        return m_statusTracker.getStartupComplete();
     }
 
     @Override
@@ -4629,7 +4631,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
 
             // Set m_mode to RUNNING, and initialization complete
             databaseIsRunning();
-            initializationIsComplete();
+            initializationIsComplete(true); // onReplayCompletion
 
         } else {
             // Set m_mode to RUNNING
@@ -4654,12 +4656,14 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
      * Sets various indicators to show that initialization is complete,
      * including logging that event to the console.
      */
-    private void initializationIsComplete() {
+    private void initializationIsComplete(boolean allDone) {
         Object args[] = { m_mode == OperationMode.PAUSED ? "PAUSED" : "NORMAL"};
         consoleLog.l7dlog(Level.INFO, LogKeys.host_VoltDB_ServerOpMode.name(), args, null);
         consoleLog.l7dlog(Level.INFO, LogKeys.host_VoltDB_ServerCompletedInitialization.name(), null, null);
         m_statusTracker.set(NodeState.UP);
-        m_statusTracker.setInitComplete();
+        if (allDone) {
+            m_statusTracker.setStartupComplete();
+        }
     }
 
     private void databaseIsRunning() {
@@ -4696,7 +4700,8 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 String actionName = m_joining ? "join" : "rejoin";
                 // remove the rejoin blocker
                 CoreZK.removeRejoinNodeIndicatorForHost(m_messenger.getZK(), m_myHostId);
-                consoleLog.info(String.format("Node %s completed", actionName));
+                consoleLog.info(String.format("Node %s completed", actionName)); // onRecoveryComplete
+                m_statusTracker.setStartupComplete();
                 m_rejoinTruncationReqId = null;
                 m_rejoining = false;
             }
