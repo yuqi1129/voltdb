@@ -25,14 +25,11 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <set>
 #include <vector>
-
-// older GCC compilers incurs some efficiency loss
-#if defined(__GNUC__) && (__GNUC__ <= 4)
-#define CENTOS7
-#endif
+#include "common/ThreadLocalPool.h"
 
 namespace voltdb {
     namespace storage {
@@ -104,13 +101,33 @@ namespace voltdb {
             using super::get;
         };
 
-        using id_type = size_t;                        // chunk id type
+        class ThreadLocalPoolAllocator : private ThreadLocalPool {
+            size_t const m_blkSize;
+            char const* m_base;
+        public:
+            ThreadLocalPoolAllocator(size_t);
+            ~ThreadLocalPoolAllocator();
+            char* get() const noexcept;
+        };
+
         /**
-         * Holder for a chunk, whether it is self-compacting or not.
+         * Heap memory allocator candidates backing ChunkHolder
          */
-        template<typename Alloc = StdAllocator>
-        class ChunkHolder : private Alloc {
-            id_type const m_id;                         // chunk id
+        enum class allocator_enum_type : char {
+            standard_allocator,
+            thread_local_pool
+        };
+
+        template<allocator_enum_type alloc>
+        using allocator_type = typename conditional<
+            alloc == allocator_enum_type::standard_allocator,
+            StdAllocator, ThreadLocalPoolAllocator>::type;
+
+        using id_type = size_t;                        // chunk id type
+
+        template<allocator_enum_type T = allocator_enum_type::standard_allocator>
+        class ChunkHolder : private allocator_type<T> {
+            id_type const m_id;                        // chunk id
             size_t const m_tupleSize;                  // size of a table tuple per allocation
             void*const m_end;                          // indication of chunk capacity
         protected:
@@ -131,6 +148,8 @@ namespace voltdb {
             void*const next() const noexcept;
             size_t tupleSize() const noexcept;
             id_type id() const noexcept;
+            allocator_type<T>& get_allocator() noexcept;
+            allocator_type<T> const& get_allocator() const noexcept;
         };
 
         /**
@@ -280,6 +299,7 @@ namespace voltdb {
             size_t chunks() const noexcept;            // number of chunks in the list
             void* allocate();
             void free(void*);
+            id_type id() const noexcept { return 0; }              // dummy function
             using list_type = ChunkList<Chunk>;
             using typename list_type::iterator; using typename list_type::const_iterator;
             using list_type::empty; using list_type::clear; using list_type::begin;
@@ -388,6 +408,41 @@ namespace voltdb {
         };
 
         /**
+         * Validates that at most one RW snapshot iterator per
+         * allocator can be created at the same time. Singleton.
+         */
+        // First comes the phantom validator that does no-op
+        class ChunksIdNonValidator {
+            static ChunksIdNonValidator s_singleton;
+            ChunksIdNonValidator() = default;
+        public:
+            static ChunksIdNonValidator& instance();
+            inline constexpr bool validate(id_type) const noexcept {return false;}
+            inline constexpr bool remove(id_type) const noexcept {return false;}
+            inline constexpr id_type id() const noexcept {return 0;}
+        };
+        // Then the real validator
+        class ChunksIdValidatorImpl {
+            atomic<id_type> m_id{0};
+            mutex m_mapMutex{};
+            set<id_type> m_inUse{};
+            static ChunksIdValidatorImpl s_singleton;
+            ChunksIdValidatorImpl() = default;
+        public:
+            static ChunksIdValidatorImpl& instance();
+            id_type id();                       // unique id generator
+            bool validate(id_type);
+            bool remove(id_type);
+        };
+        using ChunksIdValidator =
+#ifdef NDEBUG                                          // release build: don't do actual validations
+            ChunksIdNonValidator
+#else
+            ChunksIdValidatorImpl
+#endif
+;
+
+        /**
          * A linked list of self-compacting chunks:
          * All allocation operations are appended to the last chunk
          * (creates new chunk if necessary); all free operations move
@@ -420,10 +475,8 @@ namespace voltdb {
         private:
             template<typename, typename, typename> friend struct IterableTableTupleChunks;
             using list_type = ChunkList<CompactingChunk>;
-            static id_type s_id;
-            static id_type gen_id();
-
-            id_type const m_id;                    // equivalent to "table id", to ensure injection relation to rw iterator
+            // equivalent to "table id", to ensure injection relation to rw iterator
+            id_type const m_id = ChunksIdValidator::instance().id();
             char const* m_lastFreeFromHead = nullptr;  // arg of previous call to free(from_head, ?)
             TxnLeftBoundary m_txnFirstChunk;     // (moving) left boundary for txn
             FrozenTxnBoundaries m_frozenTxnBoundaries{};  // frozen boundaries for txn
@@ -695,21 +748,6 @@ namespace voltdb {
             static Tag s_tagger;
             IterableTableTupleChunks() = delete;       // only iterator types can be created/used
 
-            /**
-             * Static, possibly no-op checkers for snapshot rw
-             * iterator on compacting chunks
-             */
-            template<typename C>struct EmptyConstructible {
-                inline constexpr bool validate(C) const noexcept {return false;}
-                inline constexpr bool remove(C) const noexcept {return false;}
-            };
-            template<typename C> class Constructible {
-                set<id_type> m_inUse{};
-            public:
-                void validate(C);
-                void remove(C);
-            };
-
             template<iterator_permission_type perm, iterator_view_type vtype>
             class iterator_type : public std::iterator<forward_iterator_tag,
                 typename conditional<perm == iterator_permission_type::ro, void const*, iterator_value_type>::type> {
@@ -733,8 +771,7 @@ namespace voltdb {
                     Chunks const, Chunks>::type>::type;
                 using constructible_type = typename conditional<
                     Chunks::Compact::value && vtype == iterator_view_type::snapshot && perm == iterator_permission_type::rw,
-                          Constructible<container_type>, EmptyConstructible<container_type>>::type;
-                constructible_type static s_constructible;
+                          ChunksIdValidator, ChunksIdNonValidator>::type;
                 value_type m_cursor;
                 void advance();
                 container_type storage() const noexcept;

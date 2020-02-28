@@ -25,6 +25,19 @@ using namespace voltdb::storage;
 
 static char buf[128];
 
+inline ThreadLocalPoolAllocator::ThreadLocalPoolAllocator(size_t n) : m_blkSize(n),
+    m_base(reinterpret_cast<char*>(allocateExactSizedObject(m_blkSize))) {
+    vassert(m_base != nullptr);
+}
+
+inline ThreadLocalPoolAllocator::~ThreadLocalPoolAllocator() {
+    freeExactSizedObject(m_blkSize, const_cast<char*>(m_base));
+}
+
+inline char* ThreadLocalPoolAllocator::get() const noexcept {
+    return const_cast<char*>(m_base);
+}
+
 template<typename T>
 template<typename... Args>
 inline typename Stack<T>::reference Stack<T>::emplace(Args&&... args) {
@@ -81,18 +94,18 @@ inline static size_t chunkSize(size_t tupleSize) noexcept {
 
 // We remove member initialization from init list to save from
 // storing chunk size into object
-template<typename Alloc> inline ChunkHolder<Alloc>::ChunkHolder(size_t id, size_t tupleSize, size_t storageSize) :
-    Alloc(storageSize), m_id(id), m_tupleSize(tupleSize),
-    m_end(Alloc::get() + storageSize), m_next(Alloc::get()) {
+template<allocator_enum_type T> inline ChunkHolder<T>::ChunkHolder(id_type id, size_t tupleSize, size_t storageSize) :
+    allocator_type<T>(storageSize), m_id(id), m_tupleSize(tupleSize),
+    m_end(allocator_type<T>::get() + storageSize), m_next(allocator_type<T>::get()) {
     vassert(tupleSize <= 4 * 0x100000);
     vassert(m_next != nullptr);
 }
 
-template<typename Alloc> inline size_t ChunkHolder<Alloc>::id() const noexcept {
+template<allocator_enum_type T> inline id_type ChunkHolder<T>::id() const noexcept {
     return m_id;
 }
 
-template<typename Alloc> inline void* ChunkHolder<Alloc>::allocate() noexcept {
+template<allocator_enum_type T> inline void* ChunkHolder<T>::allocate() noexcept {
     if (next() >= end()) {                 // chunk is full
         return nullptr;
     } else {
@@ -102,35 +115,43 @@ template<typename Alloc> inline void* ChunkHolder<Alloc>::allocate() noexcept {
     }
 }
 
-template<typename Alloc> inline bool ChunkHolder<Alloc>::contains(void const* addr) const {
+template<allocator_enum_type T> inline bool ChunkHolder<T>::contains(void const* addr) const {
     // check alignment
     vassert(addr < begin() || addr >= end() || 0 ==
             (reinterpret_cast<char const*>(addr) - reinterpret_cast<char*const>(begin())) % m_tupleSize);
     return addr >= begin() && addr < next();
 }
 
-template<typename Alloc> inline bool ChunkHolder<Alloc>::full() const noexcept {
+template<allocator_enum_type T> inline bool ChunkHolder<T>::full() const noexcept {
     return next() == end();
 }
 
-template<typename Alloc> inline bool ChunkHolder<Alloc>::empty() const noexcept {
+template<allocator_enum_type T> inline bool ChunkHolder<T>::empty() const noexcept {
     return next() == begin();
 }
 
-template<typename Alloc> inline void* const ChunkHolder<Alloc>::begin() const noexcept {
-    return reinterpret_cast<void*>(Alloc::get());
+template<allocator_enum_type T> inline void* const ChunkHolder<T>::begin() const noexcept {
+    return reinterpret_cast<void*>(allocator_type<T>::get());
 }
 
-template<typename Alloc> inline void* const ChunkHolder<Alloc>::end() const noexcept {
+template<allocator_enum_type T> inline void* const ChunkHolder<T>::end() const noexcept {
     return m_end;
 }
 
-template<typename Alloc> inline void* const ChunkHolder<Alloc>::next() const noexcept {
+template<allocator_enum_type T> inline void* const ChunkHolder<T>::next() const noexcept {
     return m_next;
 }
 
-template<typename Alloc> inline size_t ChunkHolder<Alloc>::tupleSize() const noexcept {
+template<allocator_enum_type T> inline size_t ChunkHolder<T>::tupleSize() const noexcept {
     return m_tupleSize;
+}
+
+template<allocator_enum_type T> inline allocator_type<T>& ChunkHolder<T>::get_allocator() noexcept {
+    return *this;
+}
+
+template<allocator_enum_type T> inline allocator_type<T> const& ChunkHolder<T>::get_allocator() const noexcept {
+    return *this;
 }
 
 inline EagerNonCompactingChunk::EagerNonCompactingChunk(id_type s1, size_t s2, size_t s3) : super(s1, s2, s3) {}
@@ -446,10 +467,8 @@ inline typename CompactingStorageTrait::list_type::iterator CompactingStorageTra
     }
 }
 
-id_type CompactingChunks::s_id = 0;
-
 CompactingChunks::CompactingChunks(size_t tupleSize) noexcept :
-    list_type(tupleSize), CompactingStorageTrait(this), m_id(gen_id()),
+    list_type(tupleSize), CompactingStorageTrait(this),
     m_txnFirstChunk(*this), m_batched(*this) {}
 
 inline CompactingChunks::TxnLeftBoundary::TxnLeftBoundary(ChunkList<CompactingChunk>& chunks) noexcept :
@@ -477,10 +496,6 @@ inline void const*& CompactingChunks::TxnLeftBoundary::next() noexcept {
 
 inline bool CompactingChunks::TxnLeftBoundary::empty() const noexcept {
     return m_next == nullptr;
-}
-
-id_type CompactingChunks::gen_id() {
-    return s_id++;
 }
 
 inline id_type CompactingChunks::id() const noexcept {
@@ -608,6 +623,45 @@ namespace std {                                    // Need to declare these befo
             return less_rolling(lhs.id(), rhs.id());
         }
     };
+}
+
+ChunksIdValidatorImpl ChunksIdValidatorImpl::s_singleton{};
+/**
+ * The implementation just forward IteratorPermissible
+ */
+inline bool ChunksIdValidatorImpl::validate(id_type id) {
+    lock_guard<mutex> g{m_mapMutex};
+    auto const& iter = m_inUse.find(id);
+    if (iter == m_inUse.end()) {            // add entry
+        m_inUse.emplace_hint(iter, id);
+        return true;
+    } else {
+        snprintf(buf, sizeof buf, "Cannot create RW snapshot iterator on chunk list id %lu", id);
+        buf[sizeof buf - 1] = 0;
+        throw logic_error(buf);
+    }
+}
+
+inline bool ChunksIdValidatorImpl::remove(id_type id) {
+    // TODO: we need to also guard against "double deletion" case;
+    // but eecheck is currently failing mysteriously
+    lock_guard<mutex> g{m_mapMutex};
+    m_inUse.erase(id);
+    return true;
+}
+
+inline ChunksIdValidatorImpl& ChunksIdValidatorImpl::instance() {
+    return s_singleton;
+}
+
+inline id_type ChunksIdValidatorImpl::id() {
+    return m_id++;
+}
+
+ChunksIdNonValidator ChunksIdNonValidator::s_singleton{};
+
+inline ChunksIdNonValidator& ChunksIdNonValidator::instance() {
+    return s_singleton;
 }
 
 inline void CompactingChunks::free(typename CompactingChunks::remove_direction dir, void const* p) {
@@ -938,37 +992,6 @@ size_t CompactingChunks::DelayedRemover::force(bool moved) {
 
 template<typename Chunks, typename Tag, typename E> Tag IterableTableTupleChunks<Chunks, Tag, E>::s_tagger{};
 
-/**
- * The implementation just forward IteratorPermissible
- */
-template<typename Chunks, typename Tag, typename E>
-template<typename C> inline void
-IterableTableTupleChunks<Chunks, Tag, E>::Constructible<C>::validate(C src) {
-    static_assert(is_reference<C>::value, "Type C must be reference");
-    auto const& iter = m_inUse.find(src.id());
-    if (iter == m_inUse.end()) {            // add entry
-        m_inUse.emplace_hint(iter, src.id());
-    } else {
-        snprintf(buf, sizeof buf, "Cannot create RW snapshot iterator on chunk list id %lu", src.id());
-        buf[sizeof buf - 1] = 0;
-        throw logic_error(buf);
-    }
-}
-
-template<typename Chunks, typename Tag, typename E>
-template<typename C> inline void
-IterableTableTupleChunks<Chunks, Tag, E>::Constructible<C>::remove(C src) {
-    static_assert(is_reference<C>::value, "Type C must be reference");
-    // TODO: we need to also guard against "double deletion" case;
-    // but eecheck is currently failing mysteriously
-    m_inUse.erase(src.id());
-}
-
-template<typename Chunks, typename Tag, typename E>
-template<iterator_permission_type perm, iterator_view_type view>
-typename IterableTableTupleChunks<Chunks, Tag, E>::template iterator_type<perm, view>::constructible_type
-IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::s_constructible;
-
 template<typename Cont, iterator_permission_type perm, iterator_view_type view, typename = typename Cont::Compact>
 struct iterator_begin {
     using iterator = typename conditional<perm == iterator_permission_type::ro,
@@ -1014,7 +1037,7 @@ inline IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::iter
             "IterableTableTupleChunks::iterator_type::container_type is not a reference");
     static_assert(is_pointer<value_type>::value,
             "IterableTableTupleChunks::value_type is not a pointer");
-    s_constructible.validate(src);
+    constructible_type::instance().validate(src.id());
     while (m_cursor != nullptr && ! s_tagger(m_cursor)) {
         advance();         // calibrate to first non-skipped position
     }
@@ -1023,7 +1046,7 @@ inline IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::iter
 template<typename Chunks, typename Tag, typename E>
 template<iterator_permission_type perm, iterator_view_type view> inline
 IterableTableTupleChunks<Chunks, Tag, E>::iterator_type<perm, view>::~iterator_type() {
-    s_constructible.remove(static_cast<container_type>(m_storage));
+    constructible_type::instance().remove(static_cast<container_type>(m_storage).id());
 }
 
 template<typename Chunks, typename Tag, typename E>
