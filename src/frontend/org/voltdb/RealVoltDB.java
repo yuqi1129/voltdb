@@ -4471,6 +4471,18 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     }
 
     @Override
+    public int[] getNodeStartupProgress()
+    {
+        return m_statusTracker.getStartupProgress();
+    }
+
+    @Override
+    public void reportNodeStartupProgress(int completed, int total)
+    {
+        m_statusTracker.reportStartupProgress(completed, total);
+    }
+
+    @Override
     public int getMyHostId()
     {
         return m_myHostId;

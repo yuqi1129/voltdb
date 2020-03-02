@@ -264,6 +264,6 @@ public class StatusListener {
     }
 
     private static void logDebug(String str, Object... args) {
-        doLog(Level.INFO, str, args);
+        doLog(Level.DEBUG, str, args);
     }
 }

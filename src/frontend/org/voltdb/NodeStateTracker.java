@@ -46,6 +46,8 @@ public class NodeStateTracker {
     private final AtomicBoolean startupComplete =
         new AtomicBoolean(false);
 
+    private int complete, total; // progress indicators
+
     public NodeState set(NodeState newState) {
         NodeState prevState = nodeState.getAndSet(newState);
         logger.info(String.format("State change, %s => %s", prevState, newState));
@@ -58,6 +60,27 @@ public class NodeStateTracker {
 
     public Supplier<NodeState> getSupplier() {
         return nodeState::get;
+    }
+
+    public void reportStartupProgress(int complete, int total) {
+        int prevCmp, prevTot;
+        synchronized (this) {
+            prevCmp = this.complete;
+            prevTot = this.total;
+            this.complete = complete;
+            this.total = total;
+        }
+        logger.info(String.format("Progress, %d/%d => %d/%d",
+                                  prevCmp, prevTot, complete, total));
+    }
+
+    public int[] getStartupProgress() {
+        int[] out = new int[2];
+        synchronized (this) {
+            out[0] = this.complete;
+            out[1] = this.total;
+        }
+        return out;
     }
 
     public void setStartupComplete() {

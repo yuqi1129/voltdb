@@ -651,6 +651,18 @@ public class MockVoltDB implements VoltDBInterface
     }
 
     @Override
+    public int[] getNodeStartupProgress()
+    {
+        int[] p = { 1, 1 };
+        return p;
+    }
+
+    @Override
+    public void reportNodeStartupProgress(int c, int t)
+    {
+    }
+
+    @Override
     public int getMyHostId()
     {
         return m_hostId;

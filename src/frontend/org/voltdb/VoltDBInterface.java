@@ -250,6 +250,10 @@ public interface VoltDBInterface
 
     public boolean getNodeStartupComplete();
 
+    public int[] getNodeStartupProgress();
+
+    public void reportNodeStartupProgress(int completed, int total);
+
     public int getMyHostId();
 
     public int getVoltPid();
