@@ -27,14 +27,20 @@ import com.google_voltpatches.common.base.Supplier;
 /**
  * Class that aids in the tracking of a VoltDB node state.
  *
- * As well as the actual node state, there is a set-once
- * flag that marks the point at which VoltDB considers
- * startup to be complete; this is for the convenience
- * of status reporting. The node state will be UP; however,
- * we have an explicit startup-complete indication because
- * in some cases we need to defer the indication until
- * log replay is complete. The flag offers a single point
- * of truth as to server startup.
+ * As well as the actual node state, this class supports
+ * progress indication (represented as 'N things complete
+ * out of a total of M') and a set-once flag that marks
+ * the point at which VoltDB considers startup to be
+ * complete.
+ *
+ * These are both for the convenience of status reporing
+ * via an API that calls StatusServlet. It is the case
+ * that a node state of UP does not always indicate that
+ * we are ready to service client requests; and we have
+ * both a progress indicator and an explicit completion
+ * flag because of the somewhat ad-hoc way we track our
+ * progress. The flag has the final say as to whether
+ * startup has completed.
  */
 public class NodeStateTracker {
 
