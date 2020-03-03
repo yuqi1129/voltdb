@@ -59,8 +59,7 @@ public class StatusServlet extends HttpServlet {
             json.put("nodeState", instance.getNodeState());
             json.put("clusterState", instance.getMode());
             json.put("startAction", instance.getStartAction());
-            String p = progress(instance);
-            if (p != null) json.put("startProgress", p);
+            json.put("startupProgress", progress(instance));
             return json.toString();
         }
         catch (Exception ex) {
@@ -69,16 +68,16 @@ public class StatusServlet extends HttpServlet {
     }
 
     private String progress(VoltDBInterface instance) {
-        String p = null;
-        if (instance.getNodeStartupComplete()) {
-            p = "complete";
-        }
-        else {
+        String p = "complete";
+        if (!instance.getNodeStartupComplete()) {
             int[] n = instance.getNodeStartupProgress();
             if (n[1] > 0) {
                 if (n[0] < 0) n[0] = 0;
                 if (n[0] > n[1]) n[0] = n[1];
                 p = String.format("%d/%d (%d%%)", n[0], n[1], (n[0] * 100) / n[1]);
+            }
+            else {
+                p = "pending";
             }
         }
         return p;
