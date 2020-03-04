@@ -3630,6 +3630,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
             if (m_mode != OperationMode.SHUTTINGDOWN) {
                 did_it = true;
                 m_mode = OperationMode.SHUTTINGDOWN;
+                m_statusTracker.set(NodeState.SHUTTINGDOWN);
 
                 if (m_catalogContext != null && m_catalogContext.m_ptool.getAdHocLargeFallbackCount() > 0) {
                     hostLog.info(String.format("%d queries planned through @AdHocLarge were converted to normal @AdHoc plans.",
@@ -3767,6 +3768,10 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 org.voltdb.iv2.InitiatorMailbox.m_allInitiatorMailboxes.clear();
 
                 PartitionDRGateway.m_partitionDRGateways = ImmutableMap.of();
+
+                // We left the status API up as long as possible...
+                StatusListener.shutdown();
+
                 // probably unnecessary, but for tests it's nice because it
                 // will do the memory checking and run finalizers
                 System.gc();
@@ -4245,7 +4250,9 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 hostLog.warn("VoltDB node shutting down as requested by @StopNode command.");
                 shutdownInitiators();
                 m_isRunning = false;
+                m_statusTracker.set(NodeState.STOPPED); // not that anyone is going to see this.
                 hostLog.warn("VoltDB node has been shutdown By @StopNode");
+                StatusListener.shutdown();
                 System.exit(0);
             }
         };
@@ -4262,7 +4269,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                         System.exit(0);
                     }
                     try {
-                        Thread.sleep(5);
+                        Thread.sleep(5); // 5 mSec
                     } catch (Exception e) {}
                 }
             }
@@ -4473,13 +4480,13 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     @Override
     public int[] getNodeStartupProgress()
     {
-        return m_statusTracker.getStartupProgress();
+        return m_statusTracker.getProgress();
     }
 
     @Override
     public void reportNodeStartupProgress(int completed, int total)
     {
-        m_statusTracker.reportStartupProgress(completed, total);
+        m_statusTracker.reportProgress(completed, total);
     }
 
     @Override
@@ -5283,7 +5290,6 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                 m_messenger.send(CoreUtils.getHSIdFromHostAndSite(hostId, HostMessenger.CLIENT_INTERFACE_SITE_ID), msg);
             }
         }
-        StatusListener.shutdown();
     }
 
     @Override

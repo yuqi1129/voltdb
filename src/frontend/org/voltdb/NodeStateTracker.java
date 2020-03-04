@@ -41,6 +41,11 @@ import com.google_voltpatches.common.base.Supplier;
  * flag because of the somewhat ad-hoc way we track our
  * progress. The flag has the final say as to whether
  * startup has completed.
+ *
+ * Warning: since some code paths are used for startup
+ * and during normal operations, the 'progress' data
+ * may not reflect anything useful after the startup
+ * completion flag is set.
  */
 public class NodeStateTracker {
 
@@ -68,7 +73,7 @@ public class NodeStateTracker {
         return nodeState::get;
     }
 
-    public void reportStartupProgress(int complete, int total) {
+    public void reportProgress(int complete, int total) {
         int prevCmp, prevTot;
         synchronized (this) {
             prevCmp = this.complete;
@@ -76,11 +81,16 @@ public class NodeStateTracker {
             this.complete = complete;
             this.total = total;
         }
-        logger.info(String.format("Progress, %d/%d => %d/%d",
-                                  prevCmp, prevTot, complete, total));
+        String warn = "";
+        if (complete != 0 && (complete < prevCmp || total < prevTot)) {
+            warn = " [retrograde]";
+        }
+        logger.info(String.format("Progress, %d/%d => %d/%d%s",
+                                  prevCmp, prevTot, complete, total,
+                                  warn));
     }
 
-    public int[] getStartupProgress() {
+    public int[] getProgress() {
         int[] out = new int[2];
         synchronized (this) {
             out[0] = this.complete;
