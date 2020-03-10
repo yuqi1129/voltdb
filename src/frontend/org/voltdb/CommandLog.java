@@ -202,6 +202,13 @@ public interface CommandLog {
     public void populateCommandLogStats(Map<String, Integer> columnNameToIndex, Object[] rowValues);
 
     /**
+     * Statistics-related interface, used by ActivityStats.
+     * Implementaton should return outstanding byte/txn counts if applicable,
+     * otherwise do nothing.
+     */
+    public void getCommandLogOutstanding(long[] out);
+
+    /**
      * Does this logger do synchronous logging
      */
     public abstract boolean isSynchronous();

@@ -160,6 +160,8 @@ public interface ExportManagerInterface {
 
     public List<ExportStatsRow> getStats(final boolean interval);
 
+    public long getTotalPendingCount();
+
     public void initialize(CatalogContext catalogContext, List<Pair<Integer, Integer>> localPartitionsToSites,
             boolean isRejoin);
 

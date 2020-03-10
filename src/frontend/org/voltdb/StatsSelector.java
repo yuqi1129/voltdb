@@ -70,7 +70,9 @@ public enum StatsSelector {
     EXPORT,
     TASK(false),
     TASK_SCHEDULER(TASK),
-    TASK_PROCEDURE(TASK);
+    TASK_PROCEDURE(TASK),
+
+    ACTIVITY_SUMMARY;  // used by shutdown processing
 
     /** Whether or not this stat supports interval collection */
     private final boolean m_supportsInterval;

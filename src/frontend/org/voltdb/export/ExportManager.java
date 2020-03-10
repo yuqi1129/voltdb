@@ -538,6 +538,16 @@ public class ExportManager implements ExportManagerInterface
         return new ArrayList<ExportStatsRow>();
     }
 
+    // Used by ActivityStats
+    @Override
+    public long getTotalPendingCount() {
+        long total = 0;
+        for (ExportStatsRow st : getStats(false)) {
+            total += st.m_tuplesPending;
+        }
+        return total;
+    }
+
     /*
      * End of stream indicates that no more data is coming from this source
      * for this generation.

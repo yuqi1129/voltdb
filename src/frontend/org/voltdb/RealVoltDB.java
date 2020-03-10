@@ -296,6 +296,7 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
     @SuppressWarnings("unused")
     private InitiatorStats m_initiatorStats;
     private LiveClientsStats m_liveClientsStats = null;
+    private ActivityStats m_activityStats;
     int m_myHostId = -1; // not valid until we have a mesh
     String m_httpPortExtraLogMessage = null;
     boolean m_jsonEnabled;
@@ -1500,6 +1501,10 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
 
             // Dummy DRCONSUMER stats
             replaceDRConsumerStatsWithDummy();
+
+            // Activity check at shutdown
+            m_activityStats = new ActivityStats();
+            getStatsAgent().registerStatsSource(StatsSelector.ACTIVITY_SUMMARY, 0, m_activityStats);
 
             /*
              * Initialize the command log on rejoin and join before configuring the IV2
