@@ -60,6 +60,7 @@ public class StatusServlet extends HttpServlet {
             json.put("clusterState", instance.getMode());
             json.put("startAction", instance.getStartAction());
             json.put("startupProgress", progress(instance));
+            json.put("shutdownPending", instance.isPreparingShuttingdown());
             return json.toString();
         }
         catch (Exception ex) {
