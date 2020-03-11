@@ -203,8 +203,9 @@ public interface CommandLog {
 
     /**
      * Statistics-related interface, used by ActivityStats.
-     * Implementaton should return outstanding byte/txn counts if applicable,
-     * otherwise do nothing.
+     * Implementaton should return outstanding byte count
+     * in out[0], outstanding txn count in out[1].
+     * If counts are not available, ok to do nothing.
      */
     public void getCommandLogOutstanding(long[] out);
 
