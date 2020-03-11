@@ -160,7 +160,16 @@ public interface ExportManagerInterface {
 
     public List<ExportStatsRow> getStats(final boolean interval);
 
-    public long getTotalPendingCount();
+    /**
+     * Used by ActivityStats
+     */
+    default long getTotalPendingCount() {
+        long total = 0;
+        for (ExportStatsRow st : getStats(false)) {
+            total += st.m_tuplesPending;
+        }
+        return total;
+    }
 
     public void initialize(CatalogContext catalogContext, List<Pair<Integer, Integer>> localPartitionsToSites,
             boolean isRejoin);
