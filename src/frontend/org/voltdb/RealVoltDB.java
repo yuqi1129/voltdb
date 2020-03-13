@@ -980,8 +980,9 @@ public class RealVoltDB implements VoltDBInterface, RestoreAgent.Callback, HostM
                                                        config.m_statusPort,
                                                        config.m_publicInterface);
                 sl.start();
+                config.m_statusInterface = sl.getListenInterface();
                 config.m_statusPort = sl.getAssignedPort();
-                consoleLog.info("Status listener started on port " + config.m_statusPort);
+                consoleLog.info(String.format("Listening for status requests on %s:%s", config.m_statusInterface, config.m_statusPort));
             }
 
             // Replay command line args that we can see

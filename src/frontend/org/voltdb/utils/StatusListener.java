@@ -64,7 +64,7 @@ public class StatusListener {
 
     /**
      * Status listener:
-     * @param intf  address of interface on which to listen for connections
+     * @param intf  interface on which to listen for connections (null for any)
      * @param port  TCP port number (zero for automatic)
      * @param publicIntf  address to be returned in 'Host' header (if different)
      */
@@ -135,8 +135,12 @@ public class StatusListener {
         throw new RuntimeException(fail);
     }
 
+    public String getListenInterface() {
+        return m_connector != null ? m_connector.getHost() : "";
+    }
+
     public int getAssignedPort() {
-        return m_connector != null ? m_connector.getPort() : -1;
+        return m_connector != null ? m_connector.getLocalPort() : -1;
     }
 
     public static StatusListener instance() {
@@ -148,10 +152,10 @@ public class StatusListener {
             if (m_server != null) {
                 try {
                     singleton = this; // publish for use by servlets
-                    logInfo("Starting status listener on port %s", getAssignedPort());
+                    logInfo("Starting status listener on %s:%s", getListenInterface(), getAssignedPort());
                     dumpThreadInfo();
                     m_server.start();
-                    logInfo("Listening for status requests on port %s", getAssignedPort());
+                    logInfo("Status listener started on %s:%s", getListenInterface(), getAssignedPort());
                 }
                 catch (Exception ex) {
                     logWarning("StatusListener: unexpected exception from start: %s", ex);
@@ -215,7 +219,7 @@ public class StatusListener {
                 intf = getLocalAddress().getHostAddress();
                 logInfo("Using %s for host header", intf);
             }
-            m_hostHeader = intf + ':' + m_connector.getPort();
+            m_hostHeader = intf + ':' + m_connector.getLocalPort();
         }
         return m_hostHeader;
     }
