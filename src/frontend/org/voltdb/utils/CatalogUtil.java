@@ -149,6 +149,7 @@ import org.voltdb.compiler.deploymentfile.SystemSettingsType;
 import org.voltdb.compiler.deploymentfile.ThreadPoolsType;
 import org.voltdb.compiler.deploymentfile.TopicDefaultsType;
 import org.voltdb.compiler.deploymentfile.TopicProfileType;
+import org.voltdb.compiler.deploymentfile.TopicProfilesType;
 import org.voltdb.compiler.deploymentfile.TopicRetentionPolicyEnum;
 import org.voltdb.compiler.deploymentfile.TopicRetentionType;
 import org.voltdb.compiler.deploymentfile.TopicsType;
@@ -212,6 +213,9 @@ public abstract class CatalogUtil {
     public static final String MATCHED_STATEMENTS = "matching statements and parameters";
     public static final String MISMATCHED_STATEMENTS = "mismatched statements";
     public static final String MISMATCHED_PARAMETERS = "mismatched parameters";
+
+    // Topics have a default 7-day retention policy
+    public static final String TOPIC_DEFAULT_RETENTION = "7 dy";
 
 
     final static Pattern JAR_EXTENSION_RE  = Pattern.compile("(?:.+)\\.jar/(?:.+)" ,Pattern.CASE_INSENSITIVE);
@@ -1227,6 +1231,8 @@ public abstract class CatalogUtil {
         if (fi.getDr() == null) {
             fi.setDr(new FlushIntervalType.Dr());
         }
+        // Kipling topics
+        setTopicDefaults(deployment);
     }
 
     /**
@@ -1345,6 +1351,7 @@ public abstract class CatalogUtil {
 
     private static void validateTopics(Catalog catalog, DeploymentType deployment) {
         CompoundErrors errors = new CompoundErrors();
+        setTopicDefaults(deployment);
 
         // If topics have a threadpool name, validate it exists
         TopicsType topicsType = deployment.getTopics();
@@ -1378,6 +1385,10 @@ public abstract class CatalogUtil {
         }
         if (profileMap != null) {
             for(TopicProfileType profile : profileMap.values()) {
+                String profName = profile.getName();
+                if (StringUtils.isBlank(profName)) {
+                    errors.addErrorMessage("A topic profile cannot have a blank name");
+                }
                 String what = "topic profile " + profile.getName();
                 validateRetention(what, profile.getRetention(), errors);
             }
@@ -1415,6 +1426,44 @@ public abstract class CatalogUtil {
         }
         if (errors.hasErrors()) {
             throw new RuntimeException(errors.getErrorMessage());
+        }
+    }
+
+    // Set the profile default values
+    private static void setTopicDefaults(DeploymentType deployment) {
+        // Ensure deployment has a default profile with default values
+        TopicsType topics = deployment.getTopics();
+        if (topics == null) {
+            topics = new TopicsType();
+            deployment.setTopics(topics);
+        }
+        TopicProfilesType profiles = deployment.getTopics().getProfiles();
+        if (profiles == null) {
+            profiles = new TopicProfilesType();
+            deployment.getTopics().setProfiles(profiles);
+        }
+        TopicDefaultsType defaults = deployment.getTopics().getProfiles().getDefaults();
+        if (defaults == null) {
+            defaults = new TopicDefaultsType();
+            deployment.getTopics().getProfiles().setDefaults(defaults);
+        }
+        TopicRetentionType retention = deployment.getTopics().getProfiles().getDefaults().getRetention();
+        if (retention == null) {
+            retention = new TopicRetentionType();
+            retention.setPolicy(TopicRetentionPolicyEnum.TIME);
+            retention.setLimit(TOPIC_DEFAULT_RETENTION);
+            deployment.getTopics().getProfiles().getDefaults().setRetention(retention);
+        }
+
+        // Ensure each profile has a retention (default is time-based with default value)
+        for (TopicProfileType profile : topics.getProfiles().getProfile()) {
+            TopicRetentionType profRetention = profile.getRetention();
+            if (profRetention == null || profRetention.getLimit() == null) {
+                profRetention = new TopicRetentionType();
+                profRetention.setPolicy(TopicRetentionPolicyEnum.TIME);
+                profRetention.setLimit(TOPIC_DEFAULT_RETENTION);
+                profile.setRetention(profRetention);
+            }
         }
     }
 
@@ -1479,17 +1528,6 @@ public abstract class CatalogUtil {
         }
         catch (Exception ex) {
             errors.addErrorMessage("Failed to validate retention policy in " + what + ": " + ex.getMessage());
-        }
-    }
-
-    // Assumes the topics have been validated beforehand
-    public final static void validateRetentionUpdate(String what, TopicRetentionType newRetention,
-            TopicRetentionType curRetention, CompoundErrors errors) {
-        // The limit can be changed, but not the policy.
-        TopicRetentionPolicyEnum newPol = newRetention != null ? newRetention.getPolicy() : null;
-        TopicRetentionPolicyEnum curPol = curRetention != null ? curRetention.getPolicy() : null;
-        if (newPol != curPol) {
-            errors.addErrorMessage("The retention policy in " + what + " cannot be changed");
         }
     }
 
