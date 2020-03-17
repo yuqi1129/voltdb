@@ -91,7 +91,6 @@ import org.voltdb.dtxn.UndoAction;
 import org.voltdb.exceptions.DRTableNotFoundException;
 import org.voltdb.exceptions.EEException;
 import org.voltdb.export.ExportDataSource.StreamStartAction;
-import org.voltdb.export.ExportManagerInterface;
 import org.voltdb.iv2.SpInitiator.ServiceState;
 import org.voltdb.jni.ExecutionEngine;
 import org.voltdb.jni.ExecutionEngine.EventType;
@@ -1582,11 +1581,11 @@ public class Site implements Runnable, SiteProcedureConnection, SiteSnapshotConn
                     m_partitionId,
                     catalogTable.getTypeName());
             // assign the stats to the other partition's value
-            ExportManagerInterface.instance().updateInitialExportStateToSeqNo(m_partitionId, catalogTable.getTypeName(),
+            VoltDB.getExportManager().updateInitialExportStateToSeqNo(m_partitionId, catalogTable.getTypeName(),
                     StreamStartAction.REJOIN, tableEntry.getValue());
         }
         if (m_sysprocContext.isLowestSiteId()) {
-            ExportManagerInterface.instance().updateDanglingExportStates(StreamStartAction.REJOIN, exportSequenceNumbers);
+            VoltDB.getExportManager().updateDanglingExportStates(StreamStartAction.REJOIN, exportSequenceNumbers);
         }
 
         if (drSequenceNumbers != null) {

@@ -114,6 +114,8 @@ implements SnapshotDataTarget, StreamSnapshotAckReceiver.AckCallback {
                                     long writeTimeout, SnapshotSender sender, StreamSnapshotAckReceiver ackReceiver)
     {
         super();
+        // A unit test should never set a static test variable because it will bleed into other tests
+        assert(VoltDB.instanceOnServerThread() ? !m_rejoinDeathTestMode : true);
         m_targetId = m_totalSnapshotTargetCount.getAndIncrement();
         m_schemas.putAll(schemas);
         m_destHSId = HSId;

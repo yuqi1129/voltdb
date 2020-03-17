@@ -40,6 +40,7 @@ import org.apache.tomcat.jdbc.pool.DataSource;
 import org.apache.tomcat.jdbc.pool.PoolProperties;
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.CoreUtils;
+import org.voltdb.VoltDB;
 import org.voltdb.VoltType;
 import org.voltdb.export.AdvertisedDataSource;
 import org.voltdb.export.ExportManager;
@@ -185,7 +186,7 @@ public class JDBCExportClient extends ExportClientBase {
 
             m_curGenId = source.m_generation;
             m_ds = ds;
-            if (ExportManagerInterface.instance().getExportMode() == ExportMode.BASIC) {
+            if (VoltDB.getExportManager().getExportMode() == ExportMode.BASIC) {
                 m_es =
                         CoreUtils.getListeningSingleThreadExecutor(
                                 "JDBC Export decoder for partition " + source.partitionId, CoreUtils.MEDIUM_STACK_SIZE);

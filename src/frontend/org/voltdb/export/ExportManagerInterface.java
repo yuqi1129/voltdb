@@ -90,16 +90,6 @@ public interface ExportManagerInterface {
         return null;
     }
 
-    static AtomicReference<ExportManagerInterface> m_self = new AtomicReference<>();
-
-    public static ExportManagerInterface instance() {
-        return m_self.get();
-}
-
-    public static void setInstanceForTest(ExportManagerInterface self) {
-        m_self.set(self);
-    }
-
 
     /**
      * Construct ExportManager using catalog.
@@ -122,7 +112,7 @@ public interface ExportManagerInterface {
         Class<?> exportMgrClass = Class.forName(mode.m_mgrClassName);
         Constructor<?> constructor = exportMgrClass.getConstructor(int.class, CatalogContext.class, HostMessenger.class);
         ExportManagerInterface em = (ExportManagerInterface) constructor.newInstance(myHostId, catalogContext, messenger);
-        m_self.set(em);
+        VoltDB.setExportManagerInstance(em);
         if (forceCreate) {
             em.clearOverflowData();
         }

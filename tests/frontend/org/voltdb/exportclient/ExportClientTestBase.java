@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import org.mockito.Mockito;
+import org.voltdb.VoltDB;
 import org.voltdb.VoltTable;
 import org.voltdb.VoltType;
 import org.voltdb.export.AdvertisedDataSource;
@@ -97,7 +98,7 @@ public class ExportClientTestBase {
     protected void setup() {
         ExportManagerInterface mockEM = Mockito.mock(ExportManagerInterface.class);
         Mockito.when(mockEM.getExportMode()).thenReturn(ExportMode.BASIC);
-        ExportManagerInterface.setInstanceForTest(mockEM);
+        VoltDB.setExportManagerInstance(mockEM);
         vtable.clearRowData();
     }
 }

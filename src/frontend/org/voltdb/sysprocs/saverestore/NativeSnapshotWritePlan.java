@@ -230,7 +230,7 @@ public class NativeSnapshotWritePlan extends SnapshotWritePlan
                     @Override
                     public void run()
                     {
-                        ExportManagerInterface.instance().sync();
+                        VoltDB.getExportManager().sync();
                     }
                 });
 
