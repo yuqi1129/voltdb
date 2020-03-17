@@ -271,12 +271,13 @@
     <include name='org/hsqldb_voltpatches/Test*.class' />
     <include name='org/voltdb/TestAbstractTopology*.class' />
     <include name='org/voltdb/TestBuildString.class' />
-    <include name='org/voltdb/TestCLReplayAutoCatalogUpgrade.class' />
+    <include name='org/voltdb/TestCL*.class' />
     <include name='org/voltdb/TestExportInsertIntoSelectSuite.class' />
     <include name='org/voltdb/TestJoin.class' />
     <include name='org/voltdb/TestLeaderElections.class' />
     <include name='org/voltdb/TestMemoryResourceMonitor.class' />
     <include name='org/voltdb/TestMemoryResourceSnmpTrap.class' />
+    <include name='org/voltdb/TestNTProcsWithProFeatures.class' />
     <include name='org/voltdb/TestPortPirate.class' />
     <include name='org/voltdb/TestRejoinEndToEnd.class' />
     <include name='org/voltdb/TestReplicatedInvocation.class' />
@@ -314,6 +315,7 @@
     <include name='org/voltdb/export/TestExportGeneration.class' />
     <include name='org/voltdb/export/TestExportV2Suite.class' />
     <include name='org/voltdb/export/TestExportV2SuitePro.class' />
+    <include name='org/voltdb/export/TestMigrateExport.class' />
     <include name='org/voltdb/exportclient/TestJDBCExportClient.class' />
     <include name='org/voltdb/exportclient/decode/TestEndpointExpander.class' />
     <include name='org/voltdb/exportclient/decode/TestJsonObjectDecoer.class' />
@@ -322,6 +324,9 @@
     <include name='org/voltdb/exportclient/kafka/TestKafkaExportClient.class' />
     <include name='org/voltdb/groovy/TestGroovyDeployment.class' />
     <include name='org/voltdb/importer/TestChannelDistributer.class' />
+    <include name='org/voltdb/e3/kipling/**/Test*.class' />
+    <include name='org/voltdb/np/Test*.class' />
+    <include name='org/voltdb/task/Test*.class' />
 
     <!-- Exclude tests -->
     <patternset refid='junit.exclusions'/>
@@ -335,8 +340,6 @@
     <include name='org/voltdb/client/Test*.class' />
     <include name='org/voltdb/TestAdhoc*.class' />
     <include name='org/voltdb/TestAdHoc*.class' />
-    <include name='org/voltdb/TestCLReplayLiveDDLSwitch.class' />
-    <include name='org/voltdb/TestCLReplayStringParam.class' />
     <include name='org/voltdb/TestClientInterface.class' />
     <include name='org/voltdb/TestClientInterfaceHandleManager.class' />
     <include name='org/voltdb/TestCommandLogReplayState.class' />
@@ -371,8 +374,7 @@
     <include name='org/voltdb/jdbc/Test*.class' />
     <include name='org/voltdb/jni/TestExecutionEngine.class' />
     <include name='org/voltdb/jni/TestFragmentProgressUpdate.class' />
-    <include name='org/voltdb/elastic/TestDataMigrationSnapshotPlanner.class' />
-    <include name='org/voltdb/elastic/TestElasticJoinUtils.class' />
+    <include name='org/voltdb/elastic/Test*.class' />
     <include name='org/voltdb/messaging/TestVoltMessageSerialization.class' />
     <include name='org/voltdb/planner/TestAdHocPlans.class' />
     <include name='org/voltdb/planner/TestDeterminism.class' />
