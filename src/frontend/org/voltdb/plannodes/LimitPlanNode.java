@@ -47,6 +47,7 @@ public class LimitPlanNode extends AbstractPlanNode {
 
     public LimitPlanNode() {
         super();
+        System.err.println("LimitPlanNode " + m_id);
     }
 
     public LimitPlanNode(LimitPlanNode limit) {

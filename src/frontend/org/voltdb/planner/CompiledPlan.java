@@ -20,6 +20,8 @@ package org.voltdb.planner;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.voltdb.ParameterSet;
 import org.voltdb.VoltType;
@@ -345,6 +347,19 @@ public class CompiledPlan {
         } else {
             return "CompiledPlan: [null plan graph]";
         }
+    }
+
+    static private StringBuilder toJSONString(AbstractPlanNode node, StringBuilder sb) {
+        sb.append("\n").append(node.toJSONString());
+        IntStream.range(0, node.getChildCount())
+                .forEachOrdered(i -> toJSONString(node.getChild(i), sb.append("\n child ").append(i).append(": ")));
+        return sb;
+    }
+
+    public String toJSONString() {
+        return String.format("root plan graph:%s\n\nsub plan graph:%s",
+                toJSONString(rootPlanGraph, new StringBuilder()).toString(),
+                toJSONString(subPlanGraph, new StringBuilder()).toString());
     }
 
     public void setNondeterminismDetail(String contentDeterminismMessage) {

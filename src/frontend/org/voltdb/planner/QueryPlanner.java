@@ -325,6 +325,7 @@ public class QueryPlanner implements AutoCloseable {
                                                    m_paramzInfo.getParamLiteralValues());
                 if (plan != null) {
                     if (plan.extractParamValues(m_paramzInfo)) {
+                        System.out.printf("Plan <in JSON> to be executed:\n%s", plan.toJSONString());
                         return plan;
                     }
                 } else if (DEBUGGING_STATIC_MODE_TO_RETRY_ON_ERROR) {

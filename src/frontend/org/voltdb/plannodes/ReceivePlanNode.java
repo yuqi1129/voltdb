@@ -28,6 +28,7 @@ public class ReceivePlanNode extends AbstractReceivePlanNode {
 
     public ReceivePlanNode() {
         super();
+        System.err.println("ReceivePlanNode " + m_id);
     }
 
     @Override

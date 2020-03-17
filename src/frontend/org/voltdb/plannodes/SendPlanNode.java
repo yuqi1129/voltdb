@@ -31,6 +31,7 @@ public class SendPlanNode extends AbstractPlanNode {
 
     public SendPlanNode() {
         super();
+        System.err.println("SendPlanNode " + m_id);
     }
 
     @Override

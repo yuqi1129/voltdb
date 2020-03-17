@@ -34,6 +34,7 @@ import org.voltdb.types.PlanNodeType;
 public class ProjectionPlanNode extends AbstractPlanNode {
     public ProjectionPlanNode() {
         super();
+        System.err.println("ProjectionPlanNode " + m_id);
     }
 
     public ProjectionPlanNode(NodeSchema schemaToClone) {
